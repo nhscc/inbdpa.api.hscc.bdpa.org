@@ -21,19 +21,28 @@ export function getEnv<T extends Environment = Environment>() {
     USER_SALT_LENGTH: Number(process.env.USER_SALT_LENGTH) || 32,
     USER_KEY_LENGTH: Number(process.env.USER_KEY_LENGTH) || 128,
 
-    MAX_USER_BLOG_PAGES: Number(process.env.MAX_USER_BLOG_PAGES) || 100,
-    MAX_BLOG_NAME_LENGTH: Number(process.env.MAX_BLOG_NAME_LENGTH) || 100,
-    MAX_NAV_LINK_HREF_LENGTH: Number(process.env.MAX_NAV_LINK_HREF_LENGTH) || 150,
-    MAX_NAV_LINK_TEXT_LENGTH: Number(process.env.MAX_NAV_LINK_TEXT_LENGTH) || 50,
-    MAX_BLOG_PAGE_NAME_LENGTH: Number(process.env.MAX_BLOG_PAGE_NAME_LENGTH) || 100,
-    MAX_BLOG_PAGE_CONTENTS_LENGTH_BYTES:
-      parseAsBytes(process.env.MAX_BLOG_PAGE_CONTENTS_LENGTH_BYTES ?? '-Infinity') ||
-      3072,
+    MAX_SECTION_TITLE_LENGTH: Number(process.env.MAX_SECTION_TITLE_LENGTH) || 100,
+    MAX_SECTION_LOCATION_LENGTH:
+      Number(process.env.MAX_SECTION_LOCATION_LENGTH) || 100,
+    MAX_SECTION_DESCRIPTION_LENGTH:
+      Number(process.env.MAX_SECTION_DESCRIPTION_LENGTH) || 250,
+    MAX_OPPORTUNITY_TITLE_LENGTH:
+      Number(process.env.MAX_OPPORTUNITY_TITLE_LENGTH) || 100,
+    MAX_OPPORTUNITY_CONTENTS_LENGTH_BYTES:
+      parseAsBytes(
+        process.env.MAX_OPPORTUNITY_CONTENTS_LENGTH_BYTES ?? '-Infinity'
+      ) || 3072,
+    MAX_ABOUT_SECTION_LENGTH_BYTES:
+      parseAsBytes(process.env.MAX_ABOUT_SECTION_LENGTH_BYTES ?? '-Infinity') || 1024,
+    MAX_USER_SECTION_ITEMS: Number(process.env.MAX_USER_SECTION_ITEMS) || 10,
     SESSION_EXPIRE_AFTER_SECONDS:
       Number(process.env.SESSION_EXPIRE_AFTER_SECONDS) || 30,
 
-    PRUNE_DATA_MAX_PAGES_BYTES:
-      parseAsBytes(process.env.PRUNE_DATA_MAX_PAGES_BYTES ?? '-Infinity') || null,
+    PRUNE_DATA_MAX_ARTICLES_BYTES:
+      parseAsBytes(process.env.PRUNE_DATA_MAX_ARTICLES_BYTES ?? '-Infinity') || null,
+    PRUNE_DATA_MAX_OPPORTUNITIES_BYTES:
+      parseAsBytes(process.env.PRUNE_DATA_MAX_OPPORTUNITIES_BYTES ?? '-Infinity') ||
+      null,
     PRUNE_DATA_MAX_SESSIONS_BYTES:
       parseAsBytes(process.env.PRUNE_DATA_MAX_SESSIONS_BYTES ?? '-Infinity') || null,
     PRUNE_DATA_MAX_USERS_BYTES:
@@ -60,12 +69,13 @@ export function getEnv<T extends Environment = Environment>() {
         'USER_SALT_LENGTH',
         'USER_KEY_LENGTH',
 
-        'MAX_USER_BLOG_PAGES',
-        'MAX_BLOG_NAME_LENGTH',
-        'MAX_NAV_LINK_HREF_LENGTH',
-        'MAX_NAV_LINK_TEXT_LENGTH',
-        'MAX_BLOG_PAGE_NAME_LENGTH',
-        'MAX_BLOG_PAGE_CONTENTS_LENGTH_BYTES',
+        'MAX_SECTION_TITLE_LENGTH',
+        'MAX_SECTION_LOCATION_LENGTH',
+        'MAX_SECTION_DESCRIPTION_LENGTH',
+        'MAX_OPPORTUNITY_TITLE_LENGTH',
+        'MAX_OPPORTUNITY_CONTENTS_LENGTH_BYTES',
+        'MAX_ABOUT_SECTION_LENGTH_BYTES',
+        'MAX_USER_SECTION_ITEMS',
         'SESSION_EXPIRE_AFTER_SECONDS'
       ] as (keyof typeof env)[]
     ).forEach((name) => {

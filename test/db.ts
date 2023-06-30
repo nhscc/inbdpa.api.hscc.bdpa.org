@@ -12,9 +12,10 @@ import type { DummyData } from 'multiverse/mongo-test';
 
 import type {
   InternalUser,
-  InternalPage,
+  InternalSession,
+  InternalOpportunity,
   InternalInfo,
-  InternalSession
+  InternalArticle
 } from 'universe/backend/db';
 
 /**
@@ -30,9 +31,10 @@ export function getDummyData(): DummyData {
 export type DummyAppData = {
   _generatedAt: number;
   users: InternalUser[];
-  pages: InternalPage[];
   sessions: InternalSession[];
+  opportunities: InternalOpportunity[];
   info: [InternalInfo];
+  articles: InternalArticle[];
 };
 
 // ! Order matters in unit and integration tests, so APPEND ONLY ! \\
@@ -42,79 +44,182 @@ const users: InternalUser[] = [
   {
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
-    username: 'user1',
+    username: 'v1-user-1',
     salt: '91db41c494502f9ebb6217e4590cccc2',
     key: '17660270f4c4c1741ab9d43e6fb800bc784f0a3bc2f4cd31f0e26bf821ef2ae788f83af134d8c3824f5e0552f8cd432d6b23963d2ffbceb6a7c91b0f59533206',
-    email: 'user1@fake-email.com',
-    type: 'administrator'
+    email: 'v1-user-1@fake-email.com',
+    type: 'administrator',
+    fullName: null,
+    sections: {
+      about: 'Hi! I am me! Me am I!',
+      education: [
+        {
+          title: 'Something Something College',
+          location: 'Somewhere, USA',
+          description: 'Did college stuff.',
+          startedAt: Date.now() - 10 ** 100,
+          endedAt: Date.now() - 10 ** 10
+        }
+      ],
+      experience: [
+        {
+          title: 'Something Something Company',
+          location: 'Somewhere, USA',
+          description: 'Did company stuff.',
+          startedAt: Date.now() - 10 ** 100,
+          endedAt: Date.now() - 10 ** 10
+        }
+      ],
+      skills: ['Something Something Skill'],
+      volunteering: [
+        {
+          title: 'Something Something Place',
+          location: 'Somewhere, USA',
+          description: 'Did volunteering stuff.',
+          startedAt: Date.now() - 10 ** 100,
+          endedAt: Date.now() - 10 ** 10
+        }
+      ]
+    },
+    views: 125,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   },
   {
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
-    username: 'user2',
+    username: 'v1-user-2',
     salt: 'bfe69b665a1ae64bb7d76c32347adecb',
     key: 'e71e8bbd23df52bec8af8280ad7901ddd0ecd5cc43371915f7a95cd17ce0a8515127bfcd433435425c4d245f4a18efcb08e4484682aeb53fcfce5b536d79e4e4',
     email: 'user2@fake-email.com',
-    type: 'administrator'
+    type: 'staff',
+    fullName: null,
+    sections: {
+      about: "I'm user two, nice to meet you :)",
+      education: [
+        {
+          title: 'Something Something College',
+          location: 'Somewhere, USA',
+          description: 'Did college stuff.',
+          startedAt: Date.now() - 10 ** 100,
+          endedAt: Date.now() - 10 ** 50
+        },
+        {
+          title: 'Something Something Secondary College',
+          location: 'Somewhere Else, USA',
+          description: 'Did more college stuff.',
+          startedAt: Date.now() - 10 ** 50,
+          endedAt: Date.now() - 10 ** 25
+        },
+        {
+          title: 'Something Something Graduate School',
+          location: 'Someplace, USA',
+          description: 'Did even more college stuff.',
+          startedAt: Date.now() - 10 ** 25,
+          endedAt: Date.now() - 10 ** 5
+        }
+      ],
+      experience: [
+        {
+          title: 'Something Something Company',
+          location: 'Somewhere, USA',
+          description: 'Did company stuff.',
+          startedAt: Date.now() - 10 ** 100,
+          endedAt: Date.now() - 10 ** 10
+        },
+        {
+          title: 'Something Something Else Company',
+          location: 'Somewhere Else, USA',
+          description: 'Doing different company stuff.',
+          startedAt: Date.now() - 10 ** 50,
+          endedAt: null
+        },
+        {
+          title: 'Third Company',
+          location: 'Third Location, USA',
+          description: 'Doing different company stuff.',
+          startedAt: Date.now() - 10 ** 25,
+          endedAt: Date.now() - 10 ** 5
+        },
+        {
+          title: 'Fourth Company',
+          location: 'Fourth Location, USA',
+          description: 'Doing different company stuff.',
+          startedAt: Date.now(),
+          endedAt: null
+        }
+      ],
+      skills: [
+        'Skill One',
+        'Skill Two',
+        'Skill Three',
+        'Skill Four',
+        'Skill Five',
+        'Skill Six',
+        'Skill Seven',
+        'Skill Eight'
+      ],
+      volunteering: [
+        {
+          title: 'Something Something Place 1',
+          location: 'Somewhere, USA',
+          description: 'Did volunteering stuff.',
+          startedAt: Date.now() - 10 ** 100,
+          endedAt: Date.now() - 10 ** 80
+        },
+        {
+          title: 'Something Something Place 2',
+          location: 'Somewhere, USA',
+          description: 'Did volunteering stuff.',
+          startedAt: Date.now() - 10 ** 80,
+          endedAt: Date.now() - 10 ** 60
+        },
+        {
+          title: 'Something Something Place 3',
+          location: 'Somewhere, USA',
+          description: 'Did volunteering stuff.',
+          startedAt: Date.now() - 10 ** 60,
+          endedAt: Date.now() - 10 ** 40
+        },
+        {
+          title: 'Something Something Place 4',
+          location: 'Wakanda',
+          description: 'Did volunteering stuff.',
+          startedAt: Date.now() - 10 ** 40,
+          endedAt: Date.now() - 10 ** 20
+        },
+        {
+          title: 'Something Something Place 5',
+          location: 'Somewhere, USA',
+          description: 'Did volunteering stuff.',
+          startedAt: Date.now() - 10 ** 20,
+          endedAt: Date.now()
+        }
+      ]
+    },
+    views: 125_024,
+    createdAt: Date.now() - 10 ** 10,
+    updatedAt: Date.now()
   },
   {
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
-    username: 'user3',
-    salt: '12ef85b518da764294abf0a2095bb5ec',
-    key: 'e745893e064e26d4349b1639b1596c14bc9b5d050b56bf31ff3ef0dfce6f959aef8a3722a35bc35b2d142169e75ca3e1967cd6ee4818af0813d8396a724fdd22',
-    email: 'user3@fake-email.com',
-    banned: false,
-    blogName: 'user3-blog',
-    blogRootPage: 'home',
-    createdAt: mockDateNowMs - 10_000,
-    navLinks: [{ href: 'home', text: 'Home' }],
-    type: 'blogger'
-  },
-  {
-    _id: new ObjectId(),
-    __provenance: dummyRootData.auth[0].attributes.owner,
-    username: null,
-    salt: '12ef85b518da764294abf0a2095bb5ec',
-    key: 'e745893e064e26d4349b1639b1596c14bc9b5d050b56bf31ff3ef0dfce6f959aef8a3722a35bc35b2d142169e75ca3e1967cd6ee4818af0813d8396a724fdd22',
-    email: 'user4@fake-email.com',
-    banned: false,
-    blogName: 'user4-blog',
-    blogRootPage: 'home',
-    createdAt: mockDateNowMs - 100_000,
-    navLinks: [],
-    type: 'blogger'
-  }
-];
-
-const pages: InternalPage[] = [
-  {
-    _id: new ObjectId(),
-    __provenance: dummyRootData.auth[0].attributes.owner,
-    blog_id: users[2]._id,
-    createdAt: mockDateNowMs - 10_000,
-    name: 'contact',
-    contents: '# Contact us\n\nA contact form goes here!',
-    totalViews: 10
-  },
-  {
-    _id: new ObjectId(),
-    __provenance: dummyRootData.auth[0].attributes.owner,
-    blog_id: new ObjectId(),
-    createdAt: mockDateNowMs - 1000,
-    name: 'orphan',
-    contents: '# Orphan\n\nThis page is strangely unattached to anything.',
-    totalViews: 0
-  },
-  {
-    _id: new ObjectId(),
-    __provenance: dummyRootData.auth[0].attributes.owner,
-    blog_id: users[2]._id,
-    createdAt: mockDateNowMs - 100_000,
-    name: 'home',
-    contents:
-      '# COOL-BLOGIO\n\nWelcome to my **cool** *blogio*! Have you seen our [contact page](./contact)?',
-    totalViews: 1000
+    username: 'v2-user-x',
+    salt: '91db41c494502f9ebb6217e4590cccc2',
+    key: '17660270f4c4c1741ab9d43e6fb800bc784f0a3bc2f4cd31f0e26bf821ef2ae788f83af134d8c3824f5e0552f8cd432d6b23963d2ffbceb6a7c91b0f59533206',
+    email: 'v2-user-x@fake-email.com',
+    type: 'inner',
+    fullName: 'Robert "Bobby" Axelrod',
+    sections: {
+      about: "Me? I'm worth a billion bucks!",
+      education: [],
+      experience: [],
+      skills: [],
+      volunteering: []
+    },
+    views: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   }
 ];
 
@@ -123,7 +228,11 @@ const sessions: InternalSession[] = [
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     lastRenewedDate: new Date(mockDateNowMs),
-    page_id: pages[0]._id
+    user_id: null,
+    view: 'auth',
+    viewed_id: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   },
   {
     _id: new ObjectId(),
@@ -131,7 +240,11 @@ const sessions: InternalSession[] = [
     lastRenewedDate: new Date(
       mockDateNowMs - Math.floor(getEnv().SESSION_EXPIRE_AFTER_SECONDS / 2) * 1000
     ),
-    page_id: pages[0]._id
+    user_id: users[0]._id,
+    view: 'home',
+    viewed_id: null,
+    createdAt: Date.now() - 10 ** 3,
+    updatedAt: Date.now() - 1000
   },
   {
     _id: new ObjectId(),
@@ -139,16 +252,88 @@ const sessions: InternalSession[] = [
     lastRenewedDate: new Date(
       mockDateNowMs - getEnv().SESSION_EXPIRE_AFTER_SECONDS * 2000
     ),
-    page_id: pages[0]._id
+    user_id: users[0]._id,
+    view: 'profile',
+    viewed_id: users[0]._id,
+    createdAt: Date.now() - 100,
+    updatedAt: Date.now() - 100
+  }
+];
+
+const opportunities: InternalOpportunity[] = [
+  {
+    _id: new ObjectId(),
+    __provenance: dummyRootData.auth[0].attributes.owner,
+    title: 'Opportunity #1',
+    contents: 'This is the **Markdown Text** for Opportunity One.',
+    views: 0,
+    createdAt: Date.now() - 1000,
+    updatedAt: Date.now()
+  },
+  {
+    _id: new ObjectId(),
+    __provenance: dummyRootData.auth[0].attributes.owner,
+    title: 'Opportunity #2',
+    contents: 'This is the **Markdown Text** for Opportunity Two!',
+    views: 987,
+    createdAt: Date.now() - 10 ** 5,
+    updatedAt: Date.now() - 10 ** 3
+  },
+  {
+    _id: new ObjectId(),
+    __provenance: dummyRootData.auth[0].attributes.owner,
+    title: 'Opportunity #3',
+    contents: 'This is the **Markdown Text** for Opportunity Three!',
+    views: 10 ** 7,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }
+];
+
+const articles: InternalArticle[] = [
+  {
+    _id: new ObjectId(),
+    __provenance: dummyRootData.auth[0].attributes.owner,
+    title: 'Article #1',
+    contents: 'This is the **Markdown Text** for Article One.',
+    views: 0,
+    keywords: [],
+    createdAt: Date.now() - 1000,
+    updatedAt: Date.now()
+  },
+  {
+    _id: new ObjectId(),
+    __provenance: dummyRootData.auth[0].attributes.owner,
+    title: 'Article #2',
+    contents: 'This is the **Markdown Text** for Article Two!',
+    views: 789,
+    keywords: ['article', 'two'],
+    createdAt: Date.now() - 10 ** 5,
+    updatedAt: Date.now() - 10 ** 3
+  },
+  {
+    _id: new ObjectId(),
+    __provenance: dummyRootData.auth[0].attributes.owner,
+    title: 'Article #3',
+    contents: 'This is the **Markdown Text** for Article Three!',
+    views: 10 ** 7 - 4,
+    keywords: ['article', 'three'],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   }
 ];
 
 const info: [InternalInfo] = [
   {
     _id: new ObjectId(),
-    blogs: users.filter((u) => u.type === 'blogger').length,
-    pages: pages.length,
-    users: users.length
+    articles: articles.length,
+    opportunities: opportunities.length,
+    sessions: sessions.length,
+    users: users.length,
+    // eslint-disable-next-line unicorn/no-array-reduce
+    views: [...articles, ...opportunities, ...users].reduce((total, obj) => {
+      return total + obj.views;
+    }, 0)
   }
 ];
 
@@ -157,8 +342,9 @@ const info: [InternalInfo] = [
  */
 export const dummyAppData: DummyAppData = {
   _generatedAt: mockDateNowMs,
-  users,
-  pages,
+  articles,
+  info,
+  opportunities,
   sessions,
-  info
+  users
 };

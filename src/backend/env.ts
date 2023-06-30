@@ -35,6 +35,8 @@ export function getEnv<T extends Environment = Environment>() {
     MAX_ABOUT_SECTION_LENGTH_BYTES:
       parseAsBytes(process.env.MAX_ABOUT_SECTION_LENGTH_BYTES ?? '-Infinity') || 1024,
     MAX_USER_SECTION_ITEMS: Number(process.env.MAX_USER_SECTION_ITEMS) || 10,
+    MAX_ARTICLE_KEYWORDS: Number(process.env.MAX_ARTICLE_KEYWORDS) || 10,
+    MAX_ARTICLE_KEYWORD_LENGTH: Number(process.env.MAX_ARTICLE_KEYWORD_LENGTH) || 20,
     SESSION_EXPIRE_AFTER_SECONDS:
       Number(process.env.SESSION_EXPIRE_AFTER_SECONDS) || 30,
 

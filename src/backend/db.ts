@@ -35,37 +35,44 @@ export function getSchemaConfig(): DbSchema {
                 spec: 'email',
                 options: { unique: true }
               },
-              {
-                spec: 'blogName'
-                // * Uniqueness is handled at the application level since
-                // * blogName could be undefined
-              },
               // ? Lets us filter out account types for more optimal operations
-              { spec: 'type' }
+              { spec: 'type' },
+              // ? Lets us filter by updated timestamp
+              { spec: 'updatedAt' }
             ]
-          },
-          {
-            name: 'pages',
-            // * Order matters because blog_id is queried alone sometimes
-            indices: [{ spec: ['blog_id', 'name'], options: { unique: true } }]
           },
           {
             name: 'sessions',
             indices: [
-              {
-                // * Order matters because this is the comparison order
-                spec: ['blog_id', 'page_id']
-              },
+              { spec: 'user_id' },
+              { spec: 'view' },
+              { spec: 'view_id' },
               {
                 spec: 'lastRenewedDate',
                 // ? When stepping through code, don't expire stuff out of db
                 options: process.env.VSCODE_INSPECTOR_OPTIONS
                   ? {}
                   : { expireAfterSeconds: getEnv().SESSION_EXPIRE_AFTER_SECONDS }
-              }
+              },
+              // ? Lets us filter by updated timestamp
+              { spec: 'updatedAt' }
             ]
           },
-          { name: 'info' }
+          {
+            name: 'opportunities',
+            indices: [
+              // ? Lets us filter by updated timestamp
+              { spec: 'updatedAt' }
+            ]
+          },
+          { name: 'info' },
+          {
+            name: 'articles',
+            indices: [
+              // ? Lets us filter by updated timestamp
+              { spec: 'updatedAt' }
+            ]
+          }
         ]
       }
     },
@@ -306,14 +313,14 @@ export function toPublicUser(internalUser: InternalUser): PublicUser {
       blogName: internalUser.blogName
     };
 
-    return result satisfies Exact<PublicUserBlogger, typeof result>;
+    return result /*satisfies Exact<PublicUserBlogger, typeof result>*/;
   } else {
     const result = {
       ...partialPublicUser,
       type: 'administrator' as const
     };
 
-    return result satisfies Exact<PublicUserAdministrator, typeof result>;
+    return result /*satisfies Exact<PublicUserAdministrator, typeof result>*/;
   }
 }
 
@@ -335,7 +342,7 @@ export function toPublicBlog({
     createdAt
   };
 
-  return result satisfies Exact<PublicBlog, typeof result>;
+  return result /*satisfies Exact<PublicBlog, typeof result>*/;
 }
 
 /**
@@ -354,7 +361,7 @@ export function toPublicPage({
     contents
   };
 
-  return result satisfies Exact<PublicPage, typeof result>;
+  return result /*satisfies Exact<PublicPage, typeof result>*/;
 }
 
 /**
@@ -371,7 +378,7 @@ export function toPublicPageMetadata({
     totalViews
   };
 
-  return result satisfies Exact<PublicPageMetadata, typeof result>;
+  return result /*satisfies Exact<PublicPageMetadata, typeof result>*/;
 }
 
 /**

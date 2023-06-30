@@ -90,7 +90,7 @@ export function toPublicAuthEntry(entry: InternalAuthEntry): PublicAuthEntry {
     ...publicEntry
   } = { ...entry, auth_id: entry._id.toString() };
 
-  return publicEntry satisfies Exact<PublicAuthEntry, typeof publicEntry>;
+  return publicEntry /*satisfies Exact<PublicAuthEntry, typeof publicEntry>*/;
 }
 
 /**

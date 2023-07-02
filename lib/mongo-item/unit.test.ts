@@ -12,7 +12,7 @@ import { expectExceptionsWithMatchingErrors } from 'multiverse/jest-expect-match
 setupMemoryServerOverride();
 
 describe('::itemExists', () => {
-  it('returns true if an item exists in a collection where [key] == id', async () => {
+  it('returns true if an item exists in a collection where [key] === id', async () => {
     expect.hasAssertions();
 
     const col = (await getDb({ name: 'root' })).collection('auth');
@@ -169,26 +169,28 @@ describe('::itemToObjectId', () => {
     ).toStrictEqual(ids);
   });
 
-  it('throws if an item is irreducible or invalid', async () => {
+  it('throws if item is irreducible or invalid', async () => {
     expect.hasAssertions();
 
     type ParamsType = Parameters<typeof itemToStringId>[0];
     const errors: [params: ParamsType, error: string][] = [
-      [null as unknown as ParamsType, 'invalid id "null"'],
-      [undefined as unknown as ParamsType, 'invalid id "undefined"'],
-      [[null], 'invalid id "null"'],
-      [[undefined], 'invalid id "undefined"'],
-      [{} as unknown as ParamsType, 'invalid id "[object Object]"'],
-      [[{}] as unknown as ParamsType, 'invalid id "[object Object]"'],
-      ['bad' as unknown as ParamsType, 'invalid id "bad"'],
-      [['bad'], 'invalid id "bad"'],
-      [[new ObjectId(), 'bad'], 'invalid id "bad"']
+      [null as unknown as ParamsType, 'invalid ObjectId "null"'],
+      [undefined as unknown as ParamsType, 'invalid ObjectId "undefined"'],
+      [[null], 'invalid ObjectId "null"'],
+      [[undefined], 'invalid ObjectId "undefined"'],
+      [{} as unknown as ParamsType, 'invalid ObjectId "[object Object]"'],
+      [[{}] as unknown as ParamsType, 'invalid ObjectId "[object Object]"'],
+      ['bad' as unknown as ParamsType, 'invalid ObjectId "bad"'],
+      [['bad'], 'invalid ObjectId "bad"'],
+      [[new ObjectId(), 'bad'], 'invalid ObjectId "bad"']
     ];
 
     await expectExceptionsWithMatchingErrors(errors, (params) =>
       itemToObjectId(params)
     );
   });
+
+  it.todo('does not throw if item is irreducible/invalid if ignoreInvalidId is true');
 });
 
 describe('::itemToStringId', () => {
@@ -223,21 +225,25 @@ describe('::itemToStringId', () => {
   it('throws if item is irreducible', async () => {
     expect.hasAssertions();
 
+    // TODO: replace these error message strings here and elsewhere with
+    // TODO: ErrorMessage package
     type ParamsType = Parameters<typeof itemToStringId>[0];
     const errors: [params: ParamsType, error: string][] = [
-      [null as unknown as ParamsType, 'invalid id "null"'],
-      [undefined as unknown as ParamsType, 'invalid id "undefined"'],
-      [[null], 'invalid id "null"'],
-      [[undefined], 'invalid id "undefined"'],
-      [{} as unknown as ParamsType, 'invalid id "[object Object]"'],
-      [[{}] as unknown as ParamsType, 'invalid id "[object Object]"'],
-      ['bad' as unknown as ParamsType, 'invalid id "bad"'],
-      [['bad'], 'invalid id "bad"'],
-      [[new ObjectId(), 'bad'], 'invalid id "bad"']
+      [null as unknown as ParamsType, 'invalid ObjectId "null"'],
+      [undefined as unknown as ParamsType, 'invalid ObjectId "undefined"'],
+      [[null], 'invalid ObjectId "null"'],
+      [[undefined], 'invalid ObjectId "undefined"'],
+      [{} as unknown as ParamsType, 'invalid ObjectId "[object Object]"'],
+      [[{}] as unknown as ParamsType, 'invalid ObjectId "[object Object]"'],
+      ['bad' as unknown as ParamsType, 'invalid ObjectId "bad"'],
+      [['bad'], 'invalid ObjectId "bad"'],
+      [[new ObjectId(), 'bad'], 'invalid ObjectId "bad"']
     ];
 
     await expectExceptionsWithMatchingErrors(errors, (params) =>
       itemToStringId(params)
     );
   });
+
+  it.todo('does not throw if item is irreducible/invalid if ignoreInvalidId is true');
 });

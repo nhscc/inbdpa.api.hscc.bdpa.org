@@ -3,7 +3,7 @@ import { testApiHandler } from 'next-test-api-route-handler';
 import { getProperty as dotPath } from 'dot-prop';
 import { toss } from 'toss-expression';
 
-import { GuruMeditationError } from 'universe/error';
+import { ValidationError } from 'universe/error';
 import { setupMemoryServerOverride } from 'multiverse/mongo-test';
 import { BANNED_BEARER_TOKEN, DUMMY_BEARER_TOKEN } from 'multiverse/next-auth';
 import { getDb } from 'multiverse/mongo-schema';
@@ -110,7 +110,7 @@ describe('> fable integration tests', () => {
       invisible
     }) => {
       if (!displayIndex) {
-        throw new GuruMeditationError(
+        throw new ValidationError(
           'fixture is missing required property "displayIndex"'
         );
       }
@@ -144,12 +144,12 @@ describe('> fable integration tests', () => {
             prop?: string
           ): TestResult<T> | T => {
             const result: TestResult<T> =
-              typeof index == 'string'
+              typeof index === 'string'
                 ? memory.idMap[index]
                 : memory[index + (index < 0 ? displayIndex : 1)];
 
             if (!result) {
-              throw new GuruMeditationError(`no result at index "${index}"`);
+              throw new ValidationError(`no result at index "${index}"`);
             }
 
             const returnValue = prop
@@ -159,7 +159,7 @@ describe('> fable integration tests', () => {
               : result;
 
             if (returnValue === undefined) {
-              throw new GuruMeditationError(
+              throw new ValidationError(
                 `${
                   prop ? 'prop path "' + prop + '" ' : ''
                 }return value cannot be undefined`
@@ -170,13 +170,13 @@ describe('> fable integration tests', () => {
           };
 
           const requestParams =
-            typeof params == 'function' ? await params(memory) : params;
-          const requestBody = typeof body == 'function' ? await body(memory) : body;
+            typeof params === 'function' ? await params(memory) : params;
+          const requestBody = typeof body === 'function' ? await body(memory) : body;
 
           await withMockedEnv(
             async () => {
               await testApiHandler({
-                handler: handler || toss(new GuruMeditationError()),
+                handler: handler || toss(new ValidationError('no handler provided')),
                 params: requestParams,
                 requestPatcher: (req) => {
                   req.headers.authorization = `bearer ${DUMMY_BEARER_TOKEN}`;
@@ -189,7 +189,7 @@ describe('> fable integration tests', () => {
                   });
 
                   const expectedStatus =
-                    typeof response?.status == 'function'
+                    typeof response?.status === 'function'
                       ? await response.status(res.status, memory)
                       : response?.status;
 
@@ -202,7 +202,7 @@ describe('> fable integration tests', () => {
                   } catch {}
 
                   if (expectedStatus) {
-                    if (res.status != expectedStatus) {
+                    if (res.status !== expectedStatus) {
                       // eslint-disable-next-line no-console
                       console.warn('unexpected status for result:', json);
                     }
@@ -211,13 +211,13 @@ describe('> fable integration tests', () => {
                     expect(res.status).toBe(expectedStatus);
                     // eslint-disable-next-line jest/no-conditional-expect
                     expect(json.success)[
-                      res.status == 200 ? 'toBeTrue' : 'toBeFalsy'
+                      res.status === 200 ? 'toBeTrue' : 'toBeFalsy'
                     ]();
                     delete json.success;
                   }
 
                   const expectedJson =
-                    typeof response?.json == 'function'
+                    typeof response?.json === 'function'
                       ? await response.json(json, memory)
                       : response?.json;
 

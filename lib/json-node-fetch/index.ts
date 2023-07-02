@@ -297,7 +297,7 @@ export async function jsonFetch<
   if (parsedOptions.headers) {
     parsedOptions.headers = new Headers(parsedOptions.headers);
 
-    if (parsedOptions.headers.get('content-type') == JsonContentType) {
+    if (parsedOptions.headers.get('content-type') === JsonContentType) {
       try {
         parsedOptions.body = JSON.stringify(parsedOptions.body);
       } catch (error) {
@@ -334,7 +334,7 @@ export async function jsonFetch<
   }
 
   if (
-    responseContentType != JsonContentType &&
+    responseContentType !== JsonContentType &&
     parsedOptions.rejectIfNonJsonContentType
   ) {
     throw new JsonFetchError(
@@ -348,7 +348,7 @@ export async function jsonFetch<
     );
   }
 
-  if (parseError && responseContentType == JsonContentType) {
+  if (parseError && responseContentType === JsonContentType) {
     throw new JsonFetchError(
       res,
       json,
@@ -356,7 +356,7 @@ export async function jsonFetch<
     );
   }
 
-  if (responseContentType != JsonContentType || parseError) {
+  if (responseContentType !== JsonContentType || parseError) {
     json = undefined;
     error = {};
   } else if (!res.ok) {

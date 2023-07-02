@@ -1,7 +1,12 @@
 import { debugNamespace } from 'universe/constants';
 import { name as pkgName, version as pkgVersion } from 'package';
 import { verifyEnvironment } from '../expect-env';
-import { TrialError, GuruMeditationError, makeNamedError } from 'universe/error';
+import {
+  TrialError,
+  ValidationError,
+  ValidationError,
+  makeNamedError
+} from 'universe/error';
 import { tmpdir } from 'node:os';
 import { promises as fs } from 'node:fs';
 import { resolve } from 'node:path';
@@ -273,7 +278,7 @@ export function isolatedImport<T = unknown>({
     pkg = ((r) => {
       return r.default &&
         (useDefault === true ||
-          (useDefault !== false && r.__esModule && Object.keys(r).length == 1))
+          (useDefault !== false && r.__esModule && Object.keys(r).length === 1))
         ? r.default
         : r;
     })(require(path));
@@ -343,7 +348,7 @@ export async function protectedImport<T = unknown>({
     }
 
     if (expect) {
-      expectedExitCode == 'non-zero'
+      expectedExitCode === 'non-zero'
         ? expect(exitSpy).not.toBeCalledWith(0)
         : expectedExitCode === undefined
         ? expect(exitSpy).not.toBeCalled()
@@ -785,8 +790,8 @@ export function webpackTestFixture(): MockFixture {
     name: 'webpack-test',
     description: 'setting up webpack jest integration test',
     setup: async (context_) => {
-      if (typeof context_.options.webpackVersion != 'string') {
-        throw new GuruMeditationError(
+      if (typeof context_.options.webpackVersion !== 'string') {
+        throw new ValidationError(
           'invalid or missing options.webpackVersion, expected string'
         );
       }
@@ -796,12 +801,12 @@ export function webpackTestFixture(): MockFixture {
       );
 
       if (!indexPath)
-        throw new GuruMeditationError(
+        throw new ValidationError(
           'could not find initial contents for src/index file'
         );
 
       if (!context_.fileContents['webpack.config.js'])
-        throw new GuruMeditationError(
+        throw new ValidationError(
           'could not find initial contents for webpack.config.js file'
         );
 
@@ -854,7 +859,7 @@ export function nodeImportTestFixture(): MockFixture {
       );
 
       if (!indexPath)
-        throw new GuruMeditationError(
+        throw new ValidationError(
           'could not find initial contents for src/index file'
         );
 
@@ -888,9 +893,9 @@ export function gitRepositoryFixture(): MockFixture {
     setup: async (context_) => {
       if (
         context_.options.setupGit &&
-        typeof context_.options.setupGit != 'function'
+        typeof context_.options.setupGit !== 'function'
       ) {
-        throw new GuruMeditationError(
+        throw new ValidationError(
           'invalid or missing options.setupGit, expected function'
         );
       }
@@ -914,7 +919,7 @@ export function dummyDirectoriesFixture(): MockFixture {
     description: 'creating dummy directories under fixture root',
     setup: async (context_) => {
       if (!Array.isArray(context_.options.directoryPaths)) {
-        throw new GuruMeditationError(
+        throw new ValidationError(
           'invalid or missing options.directoryPaths, expected array'
         );
       }
@@ -1014,11 +1019,11 @@ export async function withMockedFixture<
   } as CustomizedFixtureContext & { using: CustomizedMockFixture[] };
 
   if (finalOptions.use) {
-    if (finalOptions.use?.[0]?.name != 'root') context_.using.push(rootFixture());
+    if (finalOptions.use?.[0]?.name !== 'root') context_.using.push(rootFixture());
     context_.using = [...context_.using, ...finalOptions.use];
     // ? `describe-root` fixture doesn't have to be the last one, but a fixture
     // ? with that name must be included at least once
-    if (!finalOptions.use.some((f) => f.name == 'describe-root'))
+    if (!finalOptions.use.some((f) => f.name === 'describe-root'))
       context_.using.push(describeRootFixture());
   } else context_.using = [rootFixture(), describeRootFixture()];
 
@@ -1035,9 +1040,9 @@ export async function withMockedFixture<
     const toString = async (
       p: CustomizedMockFixture['name'] | CustomizedMockFixture['description']
     ) =>
-      typeof p == 'function'
+      typeof p === 'function'
         ? p(context_)
-        : typeof p == 'string'
+        : typeof p === 'string'
         ? p
         : ':impossible:';
     const name = await toString(fixture.name.toString());
@@ -1050,7 +1055,7 @@ export async function withMockedFixture<
   /*eslint-disable no-await-in-loop */
   try {
     for (const mockFixture of context_.using) {
-      if (mockFixture.name == testSymbol) {
+      if (mockFixture.name === testSymbol) {
         context_.debug = debug;
         debug('executing test callback');
       } else {
@@ -1062,7 +1067,7 @@ export async function withMockedFixture<
         ? await mockFixture.setup(context_)
         : context_.debug('(warning: mock fixture has no setup function)');
 
-      if (mockFixture.name == 'describe-root') ranDescribe = true;
+      if (mockFixture.name === 'describe-root') ranDescribe = true;
     }
   } catch (error) {
     context_.debug.extend('<error>')('exception occurred: %O', error);

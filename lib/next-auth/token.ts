@@ -3,7 +3,7 @@ import { MongoServerError, ObjectId } from 'mongodb';
 
 import {
   AppValidationError,
-  GuruMeditationError,
+  AppValidationError,
   InvalidSecretError,
   ItemNotFoundError
 } from 'named-app-errors';
@@ -191,12 +191,12 @@ export function isTokenAttributes(
   const attribute = obj as TokenAttributes;
   let returnValue = false;
 
-  if (!!attribute && typeof attribute == 'object') {
-    const isValidOwner = !!attribute.owner && typeof attribute.owner == 'string';
+  if (!!attribute && typeof attribute === 'object') {
+    const isValidOwner = !!attribute.owner && typeof attribute.owner === 'string';
 
     const isValidGlobalAdmin =
       attribute.isGlobalAdmin === undefined ||
-      typeof attribute.isGlobalAdmin == 'boolean';
+      typeof attribute.isGlobalAdmin === 'boolean';
 
     const allKeysAreValid = Object.keys(attribute).every((key) =>
       validTokenAttributes.includes(key as TokenAttribute)
@@ -313,7 +313,7 @@ export async function deriveSchemeAndToken({
   if (authString !== undefined) {
     if (
       !authString ||
-      typeof authString != 'string' ||
+      typeof authString !== 'string' ||
       !/^\S+ \S/.test(authString) ||
       authString.length > getEnv().AUTH_HEADER_MAX_LENGTH
     ) {
@@ -334,21 +334,21 @@ export async function deriveSchemeAndToken({
 
     const credentials = rawCredentials.flatMap((c) => c.split(',')).filter(Boolean);
 
-    if (scheme == 'bearer') {
-      if (credentials.length == 1) {
+    if (scheme === 'bearer') {
+      if (credentials.length === 1) {
         return { scheme, token: { bearer: credentials[0] } };
       } else {
         throw new InvalidSecretError('token syntax');
       }
-    } /*else if(scheme == '...') {
+    } /*else if(scheme === '...') {
       ...
     }*/ else {
-      throw new GuruMeditationError(
+      throw new AppValidationError(
         `auth string handler for scheme "${scheme}" is not implemented`
       );
     }
   } else if (authData !== undefined) {
-    if (!authData || typeof authData != 'object') {
+    if (!authData || typeof authData !== 'object') {
       throw new InvalidSecretError('auth data');
     }
 
@@ -363,22 +363,22 @@ export async function deriveSchemeAndToken({
       throw new InvalidSecretError('scheme (disallowed or unknown)');
     }
 
-    if (scheme == 'bearer') {
+    if (scheme === 'bearer') {
       if (
         authData.token &&
-        typeof authData.token == 'object' &&
-        Object.keys(authData.token).length == 1 &&
+        typeof authData.token === 'object' &&
+        Object.keys(authData.token).length === 1 &&
         authData.token.bearer &&
-        typeof authData.token.bearer == 'string'
+        typeof authData.token.bearer === 'string'
       ) {
         return { scheme, token: { bearer: authData.token.bearer } };
       } else {
         throw new InvalidSecretError('token syntax');
       }
-    } /*else if(scheme == '...') {
+    } /*else if(scheme === '...') {
       ...
     }*/ else {
-      throw new GuruMeditationError(
+      throw new AppValidationError(
         `auth data handler for scheme "${scheme}" is not implemented`
       );
     }
@@ -418,7 +418,7 @@ export async function createToken({
     try {
       await (await getAuthDb()).insertOne({ ...newToken });
     } catch (error) {
-      throw error instanceof MongoServerError && error.code == 11_000
+      throw error instanceof MongoServerError && error.code === 11_000
         ? new AppValidationError('token collision')
         : error;
     }

@@ -33,7 +33,7 @@ type DataLimit = {
 log.log = console.info.bind(console);
 
 // ? Ensure this next line survives Webpack
-if (!globalThis.process.env.DEBUG && getEnv().NODE_ENV != 'test') {
+if (!globalThis.process.env.DEBUG && getEnv().NODE_ENV !== 'test') {
   debugFactory.enable(
     `${debugNamespace},${debugNamespace}:*,-${debugNamespace}:debug`
   );

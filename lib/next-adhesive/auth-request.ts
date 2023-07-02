@@ -54,8 +54,9 @@ export default async function (
   const { authorization: header } = req.headers;
 
   if (
-    typeof context.options.requiresAuth != 'boolean' &&
-    (!context.options.requiresAuth || typeof context.options.requiresAuth != 'object')
+    typeof context.options.requiresAuth !== 'boolean' &&
+    (!context.options.requiresAuth ||
+      typeof context.options.requiresAuth !== 'object')
   ) {
     throw new InvalidAppConfigurationError(
       'a valid "requiresAuth" option is missing from middleware configuration'

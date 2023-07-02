@@ -96,7 +96,7 @@ export async function hydrateDb({
   const rawDummyData = await getDummyData();
   let dummyData = rawDummyData[nameActual];
 
-  if (aliases[0] != nameActual) {
+  if (aliases[0] !== nameActual) {
     const foundAliases = aliases.filter((alias) => !!rawDummyData[alias]);
 
     if (foundAliases.length > 1) {
@@ -130,11 +130,11 @@ export async function hydrateDb({
   // eslint-disable-next-line unicorn/prefer-set-has
   const collectionNames = (await getSchemaConfig()).databases[
     nameActual
-  ].collections.map((col) => (typeof col == 'string' ? col : col.name));
+  ].collections.map((col) => (typeof col === 'string' ? col : col.name));
 
   await Promise.all(
     Object.entries(dummyData).map(([colName, colSchema]) => {
-      if (colName != '_generatedAt') {
+      if (colName !== '_generatedAt') {
         if (!collectionNames.includes(colName)) {
           throw new InvalidAppConfigurationError(
             `collection "${nameActual}.${colName}" referenced in dummy data is not defined in source db schema`

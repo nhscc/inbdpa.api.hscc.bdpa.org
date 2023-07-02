@@ -163,7 +163,7 @@ export async function getNameFromAlias(alias: string) {
   const schema = await getSchemaConfig();
   const nameActual = schema.aliases[alias] || alias;
 
-  if (alias != nameActual) {
+  if (alias !== nameActual) {
     debug(`mapped alias "${alias}" to database name "${nameActual}"`);
   }
 
@@ -192,13 +192,15 @@ export async function getAliasFromName(nameActual: string) {
   }
 
   const aliases = Object.entries(schema.aliases)
-    .filter(([, name]) => name == nameActual)
+    .filter(([, name]) => name === nameActual)
     .map(([alias]) => alias);
 
   if (aliases.length) {
     debug(
       `reverse-mapped database name "${nameActual}" to alias${
-        aliases.length == 1 ? ` "${aliases.toString()}"` : `es: ${aliases.join(', ')}`
+        aliases.length === 1
+          ? ` "${aliases.toString()}"`
+          : `es: ${aliases.join(', ')}`
       }`
     );
 
@@ -296,7 +298,7 @@ export async function initializeDb({
       await getSchemaConfig()
     ).databases[nameActual].collections.map((colNameOrSchema) => {
       const colSchema: CollectionSchema =
-        typeof colNameOrSchema == 'string'
+        typeof colNameOrSchema === 'string'
           ? {
               name: colNameOrSchema
             }

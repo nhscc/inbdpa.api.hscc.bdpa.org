@@ -541,7 +541,7 @@ export class RequestQueue<T = any> {
 
           reqDebug(`processing resumed`);
 
-          if (this.#delayRequestProcessingByMs != 0) {
+          if (this.#delayRequestProcessingByMs !== 0) {
             subDebug.warn(
               `resetting delayRequestProcessingByMs after resuming queue processing`
             );
@@ -549,7 +549,7 @@ export class RequestQueue<T = any> {
           }
         }
 
-        if (previousMaxRequestsPerInterval != this.maxRequestsPerInterval) {
+        if (previousMaxRequestsPerInterval !== this.maxRequestsPerInterval) {
           subDebug.warn(
             `maxRequestsPerInterval changed while processing request #${
               count + 1

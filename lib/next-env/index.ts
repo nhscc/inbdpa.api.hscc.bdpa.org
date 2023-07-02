@@ -44,8 +44,8 @@ export function getEnv<T extends Environment>(customizedEnv?: T) {
 
   const env = {
     OVERRIDE_EXPECT_ENV:
-      process.env.OVERRIDE_EXPECT_ENV == 'force-check' ||
-      process.env.OVERRIDE_EXPECT_ENV == 'force-no-check' ||
+      process.env.OVERRIDE_EXPECT_ENV === 'force-check' ||
+      process.env.OVERRIDE_EXPECT_ENV === 'force-no-check' ||
       process.env.OVERRIDE_EXPECT_ENV === undefined
         ? (process.env.OVERRIDE_EXPECT_ENV as OverrideEnvExpect)
         : toss(
@@ -126,13 +126,13 @@ export function getEnv<T extends Environment>(customizedEnv?: T) {
   // TODO: unless OVERRIDE_EXPECT_ENV is properly defined.
   /* istanbul ignore next */
   if (
-    (env.NODE_ENV != 'test' && env.OVERRIDE_EXPECT_ENV != 'force-no-check') ||
-    env.OVERRIDE_EXPECT_ENV == 'force-check'
+    (env.NODE_ENV !== 'test' && env.OVERRIDE_EXPECT_ENV !== 'force-no-check') ||
+    env.OVERRIDE_EXPECT_ENV === 'force-check'
   ) {
     const errors = [];
     const envIsGtZero = (name: keyof typeof env) => {
       if (
-        typeof env[name] != 'number' ||
+        typeof env[name] !== 'number' ||
         Number.isNaN(env[name] as number) ||
         (env[name] as number) < 0
       ) {
@@ -142,7 +142,8 @@ export function getEnv<T extends Environment>(customizedEnv?: T) {
       }
     };
 
-    if (env.NODE_ENV == 'unknown') errors.push(`bad NODE_ENV, saw "${env.NODE_ENV}"`);
+    if (env.NODE_ENV === 'unknown')
+      errors.push(`bad NODE_ENV, saw "${env.NODE_ENV}"`);
 
     // TODO: expect-env should cover this use-case (server-only) as well.
     if (isServer()) {

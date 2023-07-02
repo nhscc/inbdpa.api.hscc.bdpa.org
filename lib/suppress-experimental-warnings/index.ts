@@ -31,7 +31,7 @@ export function suppressWarnings(
     });
   }
 
-  if (warningListeners.length != 1) {
+  if (warningListeners.length !== 1) {
     debug.warn(
       `expected 1 listener on the process "warning" event, but removed ${warningListeners.length}`
     );

@@ -24,7 +24,7 @@ const debug = debugFactory(`${debugNamespace}:debug`);
 log.log = console.info.bind(console);
 
 // ? Ensure this next line survives Webpack
-if (!globalThis.process.env.DEBUG && getEnv().NODE_ENV != 'test') {
+if (!globalThis.process.env.DEBUG && getEnv().NODE_ENV !== 'test') {
   debugFactory.enable(
     `${debugNamespace},${debugNamespace}:*,-${debugNamespace}:debug`
   );
@@ -433,11 +433,11 @@ const invoked = async () => {
     ) => {
       outputStrings.push(
         `  owner: ${
-          owner == '<unauthenticated>'
+          owner === '<unauthenticated>'
             ? chalk.gray(owner)
             : chalk[error ? 'red' : 'green'].bold(owner)
         }`,
-        `  token: ${token == '<unauthenticated>' ? chalk.gray(token) : token}`,
+        `  token: ${token === '<unauthenticated>' ? chalk.gray(token) : token}`,
         `  header: ${header ?? chalk.gray(header)}`
       );
     };
@@ -502,7 +502,7 @@ const invoked = async () => {
             .sort(byRequests)
             .forEach(({ status, requests: requestResponseStatus }) => {
               const str = `    ${status} - ${requestResponseStatus} requests`;
-              outputStrings.push(status == 429 ? chalk.red(str) : str, '');
+              outputStrings.push(status === 429 ? chalk.red(str) : str, '');
             });
 
           outputStrings.push('  requests by HTTP method:');
@@ -511,7 +511,7 @@ const invoked = async () => {
             .sort(byRequests)
             .forEach(({ method, requests: requestsOfMethod }) => {
               const str = `    ${method} - ${requestsOfMethod} requests`;
-              outputStrings.push(method == 'OPTIONS' ? chalk.gray(str) : str);
+              outputStrings.push(method === 'OPTIONS' ? chalk.gray(str) : str);
             });
 
           outputStrings.push('  requests by endpoint:');
@@ -520,7 +520,7 @@ const invoked = async () => {
             .sort(byRequests)
             .forEach(({ endpoint, requests: requestsToEndpoint }) => {
               const str = `    ${endpoint} - ${requestsToEndpoint} requests`;
-              outputStrings.push(endpoint == '<unknown>' ? chalk.gray(str) : str);
+              outputStrings.push(endpoint === '<unknown>' ? chalk.gray(str) : str);
             });
 
           outputStrings.push('');

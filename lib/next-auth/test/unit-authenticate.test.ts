@@ -25,7 +25,7 @@ test('ensure validAuthenticationSchemes contains only lowercase alphanumeric str
 
   expect(
     validAuthenticationSchemes.every(
-      (scheme) => typeof scheme == 'string' && isLowercaseAlphanumeric.test(scheme)
+      (scheme) => typeof scheme === 'string' && isLowercaseAlphanumeric.test(scheme)
     )
   ).toBeTrue();
 });

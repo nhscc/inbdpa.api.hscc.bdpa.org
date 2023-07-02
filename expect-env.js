@@ -78,8 +78,8 @@ module.exports = {
 
       debug('::normalize (not normalized): %O', rule);
 
-      if (typeof rule == 'string' || rule instanceof RegExp) {
-        if (typeof rule == 'string') {
+      if (typeof rule === 'string' || rule instanceof RegExp) {
+        if (typeof rule === 'string') {
           rule = rule.startsWith('^') ? rule.slice(1) : rule;
           rule = rule.startsWith('$') ? rule.slice(0, -1) : rule;
           rule = new RegExp(`^${rule}$`);
@@ -95,10 +95,10 @@ module.exports = {
             )
           )
         };
-      } else if (typeof rule.name == 'string' || rule.name instanceof RegExp) {
+      } else if (typeof rule.name === 'string' || rule.name instanceof RegExp) {
         rule.name = rule.name instanceof RegExp ? rule.name : new RegExp(rule.name);
         rule.value =
-          typeof rule.value == 'string'
+          typeof rule.value === 'string'
             ? new RegExp(rule.value)
             : rule.value instanceof RegExp
             ? rule.value
@@ -125,7 +125,7 @@ module.exports = {
         Array.isArray(rule.variables)
       ) {
         const variables = rule.variables.map((r) => normalize(r).variables[0]);
-        const not = rule.operation == 'not';
+        const not = rule.operation === 'not';
         const opString = not ? '    ' : `${rule.operation} `;
 
         const makeSubstr = (name, value) =>
@@ -222,24 +222,24 @@ module.exports = {
             continue;
           }
 
-          if (rule.operation == 'or') {
+          if (rule.operation === 'or') {
             if (matched) {
               succeeded = true;
               break;
             }
-          } else if (rule.operation == 'and') {
+          } else if (rule.operation === 'and') {
             if (matched) succeeded = true;
             else {
               succeeded = false;
               break;
             }
-          } else if (rule.operation == 'not') {
+          } else if (rule.operation === 'not') {
             if (!matched) succeeded = true;
             else {
               succeeded = false;
               break;
             }
-          } else if (rule.operation == 'xor') {
+          } else if (rule.operation === 'xor') {
             if (succeeded === null) succeeded = !matched ? null : true;
             else if (succeeded && matched) {
               succeeded = false;

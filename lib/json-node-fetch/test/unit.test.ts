@@ -30,7 +30,7 @@ beforeEach(() => {
   mockedFetchResult.headers = new Headers();
 
   mockedFetchResult.json = jest.fn(async () => {
-    return typeof mockedFetchResultJson == 'string' ||
+    return typeof mockedFetchResultJson === 'string' ||
       mockedFetchResultJson instanceof Error
       ? toss(mockedFetchResultJson)
       : mockedFetchResultJson;

@@ -75,11 +75,11 @@ export async function removeRateLimit({
     const { ip, header } = target;
 
     if (ip !== undefined || header !== undefined) {
-      if (ip !== undefined && (typeof ip != 'string' || !ip)) {
+      if (ip !== undefined && (typeof ip !== 'string' || !ip)) {
         throw new ValidationError('ip must be a non-empty string');
       }
 
-      if (header !== undefined && (typeof header != 'string' || !header)) {
+      if (header !== undefined && (typeof header !== 'string' || !header)) {
         throw new ValidationError('header must be a non-empty string');
       }
 

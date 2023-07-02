@@ -44,7 +44,7 @@ export async function authorizeHeader({
     const { attributes } = await getTokenByDerivation({ from: header });
 
     if (
-      typeof constraints != 'string' &&
+      typeof constraints !== 'string' &&
       (!Array.isArray(constraints) || !constraints.length)
     ) {
       debug.warn('header authorization was vacuous (no constraints)');
@@ -52,7 +52,7 @@ export async function authorizeHeader({
       const constraintsArray = [constraints].flat();
       const finalConstraints = Array.from(new Set(constraintsArray));
 
-      if (finalConstraints.length != constraintsArray.length) {
+      if (finalConstraints.length !== constraintsArray.length) {
         throw new InvalidAppConfigurationError(
           'encountered duplicate authorization constraints'
         );
@@ -68,11 +68,11 @@ export async function authorizeHeader({
               );
             };
 
-            if (constraint == 'isGlobalAdmin') {
+            if (constraint === 'isGlobalAdmin') {
               if (!attributes.isGlobalAdmin) {
                 failAuthorization('isGlobalAdmin');
               }
-            } /*else if(constraint == '...') {
+            } /*else if(constraint === '...') {
               ...
             }*/ else {
               throw new InvalidAppConfigurationError(

@@ -347,7 +347,7 @@ export async function jsonFetch<
 
   // ? A case-insensitive check since unfetch doesn't use a Headers instance
   const hasJsonContentType = !!Object.entries(parsedOptions.headers || {}).some(
-    ([k, v]) => k.toLowerCase() == 'content-type' && v == JsonContentType
+    ([k, v]) => k.toLowerCase() === 'content-type' && v === JsonContentType
   );
 
   if (hasJsonContentType) {
@@ -386,7 +386,7 @@ export async function jsonFetch<
   }
 
   if (
-    responseContentType != JsonContentType &&
+    responseContentType !== JsonContentType &&
     (parsedOptions.rejectIfNonJsonContentType || parsedOptions.swr)
   ) {
     throw new JsonUnfetchError(
@@ -400,7 +400,7 @@ export async function jsonFetch<
     );
   }
 
-  if (parseError && responseContentType == JsonContentType) {
+  if (parseError && responseContentType === JsonContentType) {
     throw new JsonUnfetchError(
       res,
       json,
@@ -408,7 +408,7 @@ export async function jsonFetch<
     );
   }
 
-  if (responseContentType != JsonContentType || parseError) {
+  if (responseContentType !== JsonContentType || parseError) {
     json = undefined;
     error = {};
   } else if (!res.ok) {

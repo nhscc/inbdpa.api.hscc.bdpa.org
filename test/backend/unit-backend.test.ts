@@ -2021,7 +2021,7 @@ describe('::renewSession', () => {
     ).resolves.toBe(0);
 
     await Backend.renewSession({
-      sessionId: dummyAppData.sessions[0]._id.toString()
+      session_id: dummyAppData.sessions[0]._id.toString()
     });
 
     await expect(
@@ -2038,13 +2038,15 @@ describe('::renewSession', () => {
 
     const sessionId = new ObjectId().toString();
 
-    await expect(Backend.renewSession({ sessionId })).rejects.toMatchObject({
+    await expect(
+      Backend.renewSession({ session_id: sessionId })
+    ).rejects.toMatchObject({
       message: ErrorMessage.ItemNotFound(sessionId, 'session')
     });
 
     await expect(
       Backend.renewSession({
-        sessionId: undefined
+        session_id: undefined
       })
     ).rejects.toMatchObject({
       message: ErrorMessage.InvalidObjectId(String(undefined))
@@ -2056,7 +2058,7 @@ describe('::renewSession', () => {
 
     await expect(
       Backend.renewSession({
-        sessionId: 'not-a-valid-object-id'
+        session_id: 'not-a-valid-object-id'
       })
     ).rejects.toMatchObject({
       message: ErrorMessage.InvalidObjectId('not-a-valid-object-id')
@@ -2252,7 +2254,7 @@ describe('::deleteSession', () => {
 
     await expect(
       Backend.deleteSession({
-        sessionId: dummyAppData.sessions[0]._id.toString()
+        session_id: dummyAppData.sessions[0]._id.toString()
       })
     ).resolves.toBeUndefined();
 
@@ -2266,13 +2268,15 @@ describe('::deleteSession', () => {
 
     const sessionId = new ObjectId().toString();
 
-    await expect(Backend.deleteSession({ sessionId })).rejects.toMatchObject({
+    await expect(
+      Backend.deleteSession({ session_id: sessionId })
+    ).rejects.toMatchObject({
       message: ErrorMessage.ItemNotFound(sessionId, 'session')
     });
 
     await expect(
       Backend.deleteSession({
-        sessionId: undefined
+        session_id: undefined
       })
     ).rejects.toMatchObject({
       message: ErrorMessage.InvalidObjectId(String(undefined))
@@ -2284,7 +2288,7 @@ describe('::deleteSession', () => {
 
     await expect(
       Backend.deleteSession({
-        sessionId: 'not-a-valid-object-id'
+        session_id: 'not-a-valid-object-id'
       })
     ).rejects.toMatchObject({
       message: ErrorMessage.InvalidObjectId('not-a-valid-object-id')

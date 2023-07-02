@@ -26,7 +26,7 @@ describe('::jsonFetch', () => {
 
       let dat;
       try {
-        if (data != '{"broken') {
+        if (data !== '{"broken') {
           dat = JSON.stringify(data);
         }
       } catch {
@@ -44,7 +44,7 @@ describe('::jsonFetch', () => {
     const port = await new Promise<number>((resolve, reject) => {
       server.listen(() => {
         const addr = server.address();
-        !addr || typeof addr == 'string'
+        !addr || typeof addr === 'string'
           ? reject(new Error('assertion failed unexpectedly'))
           : resolve(addr.port);
       });

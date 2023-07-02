@@ -8,7 +8,7 @@ import {
   withMockedOutput
 } from 'testverse/setup';
 
-import { GuruMeditationError, TrialError } from 'universe/error';
+import { ValidationError, TrialError } from 'universe/error';
 
 // * Follow the steps (below) to tailor these tests to this specific project 😉
 
@@ -79,7 +79,7 @@ async function getCollectionSize(
       targetCollections.map(async (dbCollection) => {
         const [dbName, ...rawCollectionName] = dbCollection.split('.');
 
-        if (!dbName || rawCollectionName.length != 1) {
+        if (!dbName || rawCollectionName.length !== 1) {
           throw new TrialError(`invalid input "${dbCollection}" to countCollection`);
         }
 
@@ -87,9 +87,9 @@ async function getCollectionSize(
           rawCollectionName[0]
         );
 
-        if (metric == 'count') {
+        if (metric === 'count') {
           return colDb.countDocuments().then((count) => ({ [dbCollection]: count }));
-        } else if (metric == 'bytes') {
+        } else if (metric === 'bytes') {
           return colDb
             .aggregate<{ size: number }>([
               {
@@ -104,7 +104,7 @@ async function getCollectionSize(
               [dbCollection]: r?.size ?? 0
             }));
         } else {
-          throw new GuruMeditationError(`unknown metric "${metric}"`);
+          throw new ValidationError(`unknown metric "${metric}"`);
         }
       })
     ))
@@ -112,11 +112,11 @@ async function getCollectionSize(
 
   const resultLength = Object.keys(result).length;
 
-  if (resultLength != targetCollections.length) {
+  if (resultLength !== targetCollections.length) {
     throw new TrialError('invalid output from countCollection');
   }
 
-  return resultLength == 1 ? result[collections.toString()] : result;
+  return resultLength === 1 ? result[collections.toString()] : result;
 }
 
 it('is verbose when no DEBUG environment variable set and compiled NODE_ENV is not test', async () => {

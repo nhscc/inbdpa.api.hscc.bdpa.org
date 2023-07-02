@@ -20,7 +20,7 @@ const debug = debugFactory('next-adhesive:add-raw-body');
 const defaultRequestBodySizeLimit = '1mb';
 
 const isRawBodyError = (error: unknown): error is RawBodyError => {
-  return isNativeError(error) && typeof (error as RawBodyError).type == 'string';
+  return isNativeError(error) && typeof (error as RawBodyError).type === 'string';
 };
 
 /**
@@ -134,7 +134,7 @@ export default async function (
     try {
       buffer = (await getRawBody(req, { encoding, limit })).toString();
     } catch (error) {
-      if (isRawBodyError(error) && error.type == 'entity.too.large') {
+      if (isRawBodyError(error) && error.type === 'entity.too.large') {
         sendHttpTooLarge(res, { error: `body exceeded ${limit} size limit` });
       } else {
         throw new ClientValidationError('invalid body');

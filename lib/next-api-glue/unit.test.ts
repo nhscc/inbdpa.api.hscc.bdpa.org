@@ -76,7 +76,7 @@ describe('::withMiddleware', () => {
       rejectOnHandlerError: true,
       handler: withMiddleware(
         async (req, res) => {
-          res.status(req.headers.key == '1234' ? 200 : 555).send({});
+          res.status(req.headers.key === '1234' ? 200 : 555).send({});
         },
         { descriptor: '/fake', use: [] }
       ),
@@ -899,7 +899,7 @@ describe('::withMiddleware', () => {
     };
 
     withMiddleware(undefined, {
-      // @ts-expect-error: MiddlewareContext != MiddlewareContext<myMiddlewareOptions>
+      // @ts-expect-error: MiddlewareContext !== MiddlewareContext<myMiddlewareOptions>
       use: [myMiddleware]
     });
 
@@ -1060,7 +1060,7 @@ describe('::middlewareFactory', () => {
     };
 
     middlewareFactory({
-      // @ts-expect-error: MiddlewareContext != MiddlewareContext<myMiddlewareOptions>
+      // @ts-expect-error: MiddlewareContext !== MiddlewareContext<myMiddlewareOptions>
       use: [myMiddleware]
     })(undefined, {
       descriptor: '/fake'
@@ -1118,7 +1118,7 @@ describe('::middlewareFactory', () => {
       use: [myPartialMiddleware]
     })(undefined, {
       descriptor: '/fake',
-      // @ts-expect-error: MiddlewareContext != MiddlewareContext<myMiddlewareOptions>
+      // @ts-expect-error: MiddlewareContext !== MiddlewareContext<myMiddlewareOptions>
       appendUse: [myMiddleware]
     });
 

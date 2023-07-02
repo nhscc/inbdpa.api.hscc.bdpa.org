@@ -215,7 +215,7 @@ export function withMiddleware<
           };
 
           if (!done) {
-            if (typeof currentMiddleware == 'function') {
+            if (typeof currentMiddleware === 'function') {
               localDebug('executing middleware');
               await currentMiddleware(req, res, middlewareContext);
               ranAtLeastOneMiddleware = true;
@@ -269,7 +269,7 @@ export function withMiddleware<
         throw error;
       }
 
-      if (typeof handler == 'function') {
+      if (typeof handler === 'function') {
         if (primaryChainWasAborted) {
           debug('not executing handler since primary chain execution was aborted');
         } else {

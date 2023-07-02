@@ -4,7 +4,7 @@ import { toss } from 'toss-expression';
 import { ObjectId } from 'mongodb';
 import debugFactory from 'debug';
 
-import { GuruMeditationError } from 'universe/error';
+import { GuruMeditationError, ValidationError } from 'universe/error';
 import { defaultNavLinks } from 'universe/backend';
 import { getEnv } from 'universe/backend/env';
 
@@ -94,7 +94,7 @@ export type TestFixture = {
    */
   id?: string;
   /**
-   * If `invisible == true`, the test is not counted when generating positional
+   * If `invisible === true`, the test is not counted when generating positional
    * fixtures.
    *
    * @default false
@@ -136,7 +136,7 @@ export type TestFixture = {
    */
   response?: {
     /**
-     * The expected response status. If status != 200, we expect `json.success`
+     * The expected response status. If status !== 200, we expect `json.success`
      * to be `false`. Otherwise, we expect it to be `true`. All status-related
      * checks are skipped if a callback is provided that returns `undefined`.
      */
@@ -184,7 +184,7 @@ export function getFixtures(api: typeof import('testverse/util').api): TestFixtu
       debug(`range: ${range}`);
 
       if (!(0 < min && min <= max && max < Number.POSITIVE_INFINITY)) {
-        throw new GuruMeditationError(`invalid RUN_ONLY range "${min}-${max}"`);
+        throw new ValidationError(`invalid RUN_ONLY range "${min}-${max}"`);
       } else {
         const finalRange = Array.from({ length: max - min + 1 }).map(
           (_, ndx) => min + ndx
@@ -1457,7 +1457,7 @@ export function getFixtures(api: typeof import('testverse/util').api): TestFixtu
     for (let index = 0, noSkipCount = 0; index < filteredFixtures.length; index++) {
       if (
         !willSkipFixture(filteredFixtures[index]) &&
-        noSkipCount++ % reqPerContrived == 0
+        noSkipCount++ % reqPerContrived === 0
       ) {
         filteredFixtures.splice(index, 0, {
           displayIndex: -1,

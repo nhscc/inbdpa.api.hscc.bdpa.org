@@ -174,7 +174,7 @@ describe('::hydrateDb', () => {
 
     Object.entries((await testLib.getDummyData())['fake-db-1']).forEach(
       ([colName, colData]) => {
-        if (colName != '_generatedAt') {
+        if (colName !== '_generatedAt') {
           expect(db.collection).toBeCalledWith(colName);
           // ? The createIndex method is reused for easy access to the insertMany mock
           expect(db.createIndex).toBeCalledWith(colData);
@@ -234,7 +234,7 @@ describe('::hydrateDb', () => {
 
     Object.entries((await testLib.getDummyData())['fake-db-1']).forEach(
       ([colName, colData]) => {
-        if (colName != '_generatedAt') {
+        if (colName !== '_generatedAt') {
           expect(db.collection).toBeCalledWith(colName);
           // ? The createIndex method is reused for easy access to the insertMany mock
           expect(db.createIndex).toBeCalledWith(colData);
@@ -268,7 +268,7 @@ describe('::hydrateDb', () => {
 
     Object.entries((await testLib.getDummyData())['fake-alias-3']).forEach(
       ([colName, colData]) => {
-        if (colName != '_generatedAt') {
+        if (colName !== '_generatedAt') {
           expect(db.collection).toBeCalledWith(colName);
           // ? The createIndex method is reused for easy access to the insertMany mock
           expect(db.createIndex).toBeCalledWith(colData);

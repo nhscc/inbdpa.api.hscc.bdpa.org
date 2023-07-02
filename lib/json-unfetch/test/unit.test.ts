@@ -32,7 +32,7 @@ beforeEach(() => {
     new Map() as unknown as (typeof mockedFetchResult)['headers'];
 
   mockedFetchResult.json = jest.fn(async () => {
-    return typeof mockedFetchResultJson == 'string' ||
+    return typeof mockedFetchResultJson === 'string' ||
       mockedFetchResultJson instanceof Error
       ? toss(mockedFetchResultJson)
       : mockedFetchResultJson;

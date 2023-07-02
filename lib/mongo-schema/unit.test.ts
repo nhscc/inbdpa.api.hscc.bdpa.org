@@ -321,14 +321,14 @@ describe('::initializeDb', () => {
 
         schema.databases['fake-db-1'].collections.forEach((col) => {
           expect(db1.createCollection).toBeCalledWith(
-            ...(typeof col == 'string'
+            ...(typeof col === 'string'
               ? [col, undefined]
               : [col.name, col.createOptions])
           );
         });
 
         schema.databases['fake-db-2'].collections.forEach((col) => {
-          if (typeof col == 'string') {
+          if (typeof col === 'string') {
             expect(db2.createCollection).toBeCalledWith(col, undefined);
           } else {
             expect(db2.createCollection).toBeCalledWith(col.name, col.createOptions);

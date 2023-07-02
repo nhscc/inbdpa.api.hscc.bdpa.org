@@ -19,7 +19,7 @@ export async function isDueForContrivedError() {
 
     debug(`${count}%${reqPerError} = ${count % reqPerError}`);
 
-    if (count % reqPerError == 0) {
+    if (count % reqPerError === 0) {
       debug('determined request is due for contrived error');
       return true;
     }

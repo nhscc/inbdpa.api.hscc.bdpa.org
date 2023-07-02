@@ -1067,7 +1067,7 @@ describe('RequestQueue::requestInspector', () => {
     });
 
     queue.requestInspector = async ({ queue: q, state }) => {
-      if (state.hello == 'world') {
+      if (state.hello === 'world') {
         const pReqRedirect = q.addRequestToQueue('https://rake-url', {
           method: 'PUT',
           body: 'status=403'
@@ -1248,7 +1248,7 @@ describe('RequestQueue::responseInspector', () => {
     queue.responseInspector = async ({ response, queue: q, state }) => {
       const res = response as Response;
 
-      if (res.status == 200) {
+      if (res.status === 200) {
         const pReqRetry = q.addRequestToQueue(
           'https://fake-url',
           { method: 'POST', body: 'status=403' },

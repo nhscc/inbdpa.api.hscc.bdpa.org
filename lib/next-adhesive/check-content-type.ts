@@ -73,7 +73,7 @@ export default async function (
   const configToLowercase = (
     c: AllowedContentTypesConfig
   ): AllowedContentTypesConfig => {
-    return typeof c == 'string'
+    return typeof c === 'string'
       ? (c.toLowerCase() as typeof c)
       : Array.isArray(c)
       ? c.map((s) => s.toLowerCase())
@@ -89,7 +89,7 @@ export default async function (
     if (rawAllowedContentTypes) {
       if (
         Array.isArray(rawAllowedContentTypes) ||
-        typeof rawAllowedContentTypes == 'string'
+        typeof rawAllowedContentTypes === 'string'
       ) {
         return configToLowercase(rawAllowedContentTypes);
       } else {
@@ -130,11 +130,11 @@ export default async function (
         });
       }
     } else {
-      if (allowed == 'none') {
+      if (allowed === 'none') {
         if (contentType) {
           return sendError();
         }
-      } else if (allowed != 'any') {
+      } else if (allowed !== 'any') {
         if (Array.isArray(allowed)) {
           if (isPayloadMethod || contentType) {
             const allowsNone = allowed.includes('none');
@@ -142,7 +142,7 @@ export default async function (
               if (!allowsNone) {
                 return sendError();
               }
-            } else if (contentType == 'none' || !allowed.includes(contentType)) {
+            } else if (contentType === 'none' || !allowed.includes(contentType)) {
               return sendError();
             }
           }
@@ -150,18 +150,18 @@ export default async function (
           if (Object.keys(allowed).includes(method)) {
             const allowedSubset = allowed[method as ValidHttpMethod];
 
-            if (allowedSubset == 'none') {
+            if (allowedSubset === 'none') {
               if (contentType) {
                 return sendError();
               }
-            } else if (allowedSubset && allowedSubset != 'any') {
+            } else if (allowedSubset && allowedSubset !== 'any') {
               const allowsNone = allowedSubset.includes('none');
               if (!contentType) {
                 if (!allowsNone) {
                   return sendError();
                 }
               } else if (
-                contentType == 'none' ||
+                contentType === 'none' ||
                 !allowedSubset.includes(contentType)
               ) {
                 return sendError();

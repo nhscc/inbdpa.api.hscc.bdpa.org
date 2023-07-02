@@ -97,11 +97,14 @@ const invoked = async () => {
         if ((await infoDb.countDocuments()) === 0) {
           await infoDb.insertOne({
             _id: new ObjectId(),
-            blogs: 0,
-            pages: 0,
+            articles: 0,
+            opportunities: 0,
+            views: 0,
             users: 0
           });
         }
+
+        // TODO: add users and other neat stuff here
 
         await getPrompter(process.env.TEST_PROMPTER_FINALIZER).prompt<{
           action: string;

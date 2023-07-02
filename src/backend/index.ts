@@ -9,7 +9,8 @@ import {
   AppValidationError,
   InvalidItemError,
   ItemNotFoundError,
-  ValidationError
+  ValidationError,
+  GuruMeditationError
 } from 'universe/error';
 
 import {
@@ -923,10 +924,20 @@ export async function deleteUser({
     getInfoDb()
   ]);
 
+  const { connections } =
+    (await usersDb.findOne({ _id: userId })) ||
+    toss(new GuruMeditationError('user has gone missing'));
+
   // TODO: this (and code like it elsewhere) should be within a transaction
   const [deleteUsersCount] = await Promise.all([
     usersDb.deleteOne({ _id: userId }).then(async ({ deletedCount }) => {
-      await infoDb.updateOne({}, { $inc: { users: -1 } });
+      await Promise.all([
+        infoDb.updateOne({}, { $inc: { users: -1 } }),
+        usersDb.updateMany(
+          { _id: { $in: connections } },
+          { $pull: { connections: userId } }
+        )
+      ]);
       return deletedCount;
     }),
     articlesDb.deleteMany({ creator_id: userId }).then(({ deletedCount }) => {

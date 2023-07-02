@@ -80,16 +80,6 @@ export function validateNewUserData(
     );
   }
 
-  if (
-    !('type' in data) ||
-    typeof data.type !== 'string' ||
-    !userTypes.includes(data.type as UserType)
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidFieldValue('type', undefined, userTypes)
-    );
-  }
-
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { email, username, key, salt, type, fullName, ...rest } = data;
   const restKeys = Object.keys(rest);
@@ -107,7 +97,7 @@ export function validatePatchUserData(
   { allowFullName }: { allowFullName: boolean }
 ): asserts data is Pick<
   PatchUser,
-  'email' | 'fullName' | 'key' | 'salt' | 'sections' | 'views'
+  'email' | 'fullName' | 'key' | 'salt' | 'sections' | 'views' | 'type'
 > {
   validateGenericUserData(data, { isPatchData: true, allowFullName });
 
@@ -366,11 +356,11 @@ export function validatePatchArticleData(
 function validateGenericUserData(
   data: unknown,
   { isPatchData, allowFullName }: { isPatchData: false; allowFullName: boolean }
-): asserts data is Pick<NewUser, 'email' | 'salt' | 'key' | 'fullName'>;
+): asserts data is Pick<NewUser, 'email' | 'salt' | 'key' | 'fullName' | 'type'>;
 function validateGenericUserData(
   data: unknown,
   { isPatchData, allowFullName }: { isPatchData: true; allowFullName: boolean }
-): asserts data is Pick<PatchUser, 'email' | 'salt' | 'key' | 'fullName'>;
+): asserts data is Pick<PatchUser, 'email' | 'salt' | 'key' | 'fullName' | 'type'>;
 function validateGenericUserData(
   data: unknown,
   {
@@ -451,6 +441,15 @@ function validateGenericUserData(
     } else {
       throw new ValidationError(ErrorMessage.UnknownField('fullName'));
     }
+  }
+
+  if (
+    (!isPatchData || (isPatchData && data.type !== undefined)) &&
+    (typeof data.type !== 'string' || !userTypes.includes(data.type as UserType))
+  ) {
+    throw new ValidationError(
+      ErrorMessage.InvalidFieldValue('type', undefined, userTypes)
+    );
   }
 }
 

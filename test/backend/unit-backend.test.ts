@@ -55,7 +55,12 @@ describe('::getAllUsers', () => {
         updatedAfter: undefined
       })
     ).resolves.toStrictEqual(
-      dummyAppData.users.map((internalUser) => toPublicUser(internalUser, undefined))
+      dummyAppData.users.map((internalUser) =>
+        toPublicUser(internalUser, {
+          activeSessionCount: undefined,
+          withFullName: false
+        })
+      )
     );
   });
 
@@ -957,6 +962,7 @@ describe('::createUser', () => {
   });
 });
 
+// TODO: createOpportunity/createArticle creator_id needs to be checked for existence
 describe('::createPage', () => {
   it('creates and returns a new blog page', async () => {
     expect.hasAssertions();

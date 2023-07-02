@@ -558,7 +558,10 @@ export async function createUser({
   }
 
   await (await getInfoDb()).updateOne({}, { $inc: { users: 1 } });
-  return toPublicUser(newUser, apiVersion === 2 ? 0 : undefined);
+  return toPublicUser(newUser, {
+    activeSessionCount: apiVersion === 2 ? 0 : undefined,
+    withFullName: apiVersion === 2
+  });
 }
 
 export async function createSession({
@@ -634,7 +637,9 @@ export async function createOpportunity({
   await opportunitiesDb.insertOne(newOpportunity);
   await infoDb.updateOne({}, { $inc: { opportunities: 1 } });
 
-  return toPublicOpportunity(newOpportunity, apiVersion === 2 ? 0 : undefined);
+  return toPublicOpportunity(newOpportunity, {
+    activeSessionCount: apiVersion === 2 ? 0 : undefined
+  });
 }
 
 export async function createArticle({
@@ -671,7 +676,9 @@ export async function createArticle({
   await articlesDb.insertOne(newArticle);
   await infoDb.updateOne({}, { $inc: { articles: 1 } });
 
-  return toPublicArticle(newArticle, 0);
+  return toPublicArticle(newArticle, {
+    activeSessionCount: 0
+  });
 }
 
 export async function createUserConnection({
@@ -742,7 +749,7 @@ export async function updateUser({
 
   const usersDb = await getUsersDb();
   const infoDb = await getInfoDb();
-  const { email, fullName, key, salt, sections, views } = data;
+  const { email, fullName, key, salt, sections, views, type } = data;
   const shouldIncrementViews = !!views;
 
   const sectionUpdates = Object.fromEntries(
@@ -767,6 +774,7 @@ export async function updateUser({
             ...(fullName ? { fullName } : {}),
             ...(key ? { key: key.toLowerCase() } : {}),
             ...(salt ? { salt: salt.toLowerCase() } : {}),
+            ...(type ? { type } : {}),
             ...(shouldIncrementViews ? { $inc: { views: 1 } } : {}),
             ...sectionUpdates
           }

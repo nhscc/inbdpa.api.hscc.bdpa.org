@@ -242,8 +242,16 @@ export type InternalUser = WithProvenance<
 export type PublicUser = WithSessionCounts<
   Pick<
     InternalUser,
-    'username' | 'salt' | 'email' | 'type' | 'createdAt' | 'updatedAt'
+    | 'username'
+    | 'salt'
+    | 'email'
+    | 'type'
+    | 'views'
+    | 'sections'
+    | 'createdAt'
+    | 'updatedAt'
   > & {
+    fullName?: InternalUser['fullName'];
     user_id: string;
   }
 >;
@@ -260,7 +268,7 @@ export type NewUser = Pick<
  * The shape of a patch application user.
  */
 export type PatchUser = WithIncrementableViews<
-  Partial<Pick<InternalUser, 'salt' | 'email' | 'key' | 'fullName'>> & {
+  Partial<Pick<InternalUser, 'salt' | 'email' | 'key' | 'type' | 'fullName'>> & {
     sections?: Partial<UserSectionEntries>;
   }
 >;
@@ -315,7 +323,10 @@ export type InternalOpportunity = WithProvenance<
  * The shape of a public opportunity.
  */
 export type PublicOpportunity = WithSessionCounts<
-  Pick<InternalOpportunity, 'title' | 'contents' | 'createdAt' | 'updatedAt'> & {
+  Pick<
+    InternalOpportunity,
+    'title' | 'contents' | 'views' | 'createdAt' | 'updatedAt'
+  > & {
     creator_id: string;
     opportunity_id: string;
   }
@@ -375,7 +386,7 @@ export type InternalArticle = WithProvenance<
 export type PublicArticle = WithSessionCounts<
   Pick<
     InternalArticle,
-    'title' | 'contents' | 'keywords' | 'createdAt' | 'updatedAt'
+    'title' | 'contents' | 'keywords' | 'views' | 'createdAt' | 'updatedAt'
   > & { creator_id: string; article_id: string }
 >;
 
@@ -398,14 +409,20 @@ export type PatchArticle = WithIncrementableViews<
  */
 export function toPublicUser(
   internalUser: InternalUser,
-  activeSessionCount: number | undefined
+  {
+    activeSessionCount,
+    withFullName
+  }: { activeSessionCount: number | undefined; withFullName: boolean }
 ): PublicUser {
   return {
     user_id: internalUser._id.toString(),
+    salt: internalUser.salt,
     username: internalUser.username,
     email: internalUser.email,
-    salt: internalUser.salt,
+    ...(withFullName ? { fullName: internalUser.fullName } : {}),
     type: internalUser.type,
+    views: internalUser.views,
+    sections: internalUser.sections,
     ...(activeSessionCount !== undefined ? { sessions: activeSessionCount } : {}),
     createdAt: internalUser.createdAt,
     updatedAt: internalUser.updatedAt
@@ -431,7 +448,7 @@ export function toPublicSession(internalSession: InternalSession): PublicSession
  */
 export function toPublicOpportunity(
   internalOpportunity: InternalOpportunity,
-  activeSessionCount: number | undefined
+  { activeSessionCount }: { activeSessionCount: number | undefined }
 ): PublicOpportunity {
   return {
     opportunity_id: internalOpportunity._id.toString(),
@@ -439,6 +456,7 @@ export function toPublicOpportunity(
     contents: internalOpportunity.contents,
     title: internalOpportunity.title,
     ...(activeSessionCount !== undefined ? { sessions: activeSessionCount } : {}),
+    views: internalOpportunity.views,
     createdAt: internalOpportunity.createdAt,
     updatedAt: internalOpportunity.updatedAt
   };
@@ -465,7 +483,7 @@ export function toPublicInfo(
  */
 export function toPublicArticle(
   internalArticle: InternalArticle,
-  activeSessionCount: number | undefined
+  { activeSessionCount }: { activeSessionCount: number | undefined }
 ): PublicArticle {
   return {
     article_id: internalArticle._id.toString(),
@@ -474,33 +492,48 @@ export function toPublicArticle(
     title: internalArticle.title,
     keywords: internalArticle.keywords,
     ...(activeSessionCount !== undefined ? { sessions: activeSessionCount } : {}),
+    views: internalArticle.views,
     createdAt: internalArticle.createdAt,
     updatedAt: internalArticle.updatedAt
   };
 }
 
+// TODO: re-add satisfies constraints to all projections to prevent missing keys
+// TODO: and other strange disconnects/bugs. Be sure to use Exact<...>
+
 /**
- * A MongoDB cursor projection that transforms an internal session into a public
- * session.
+ * A MongoDB cursor projection that transforms an internal user into a public
+ * user.
  */
 export const incompletePublicUserProjection = {
   _id: false,
   user_id: { $toString: '$_id' },
-  username: true,
   salt: true,
+  username: true,
   email: true,
   type: true,
+  views: true,
+  sections: true,
   createdAt: true,
   updatedAt: true
 } as const;
 
 /**
+ * A MongoDB cursor projection that transforms an internal user into a public
+ * user including the `fullName` property.
+ */
+export const incompletePublicUserProjectionWithFullName = {
+  ...incompletePublicUserProjection,
+  fullName: true
+} as const;
+
+/**
  * A MongoDB aggregation pipeline that transforms internal users into public
- * users, each including the `sessions` property. Prepend a `$match` stage to
- * return only a subset of users.
+ * users, each including the `sessions` and `fullName` properties. Prepend a
+ * `$match` stage to return only a subset of users.
  */
 export const publicUserAggregation = makeSessionCountingAggregationPipeline(
-  incompletePublicUserProjection
+  incompletePublicUserProjectionWithFullName
 );
 
 /**
@@ -524,8 +557,10 @@ export const publicSessionProjection = {
 export const incompletePublicOpportunityProjection = {
   _id: false,
   opportunity_id: { $toString: '$_id' },
+  creator_id: { $toString: '$creator_id' },
   title: true,
   contents: true,
+  views: true,
   createdAt: true,
   updatedAt: true
 } as const;
@@ -554,7 +589,9 @@ export const incompletePublicArticleProjection = {
   article_id: { $toString: '$_id' },
   title: true,
   contents: true,
+  creator_id: { $toString: '$creator_id' },
   keywords: true,
+  views: true,
   createdAt: true,
   updatedAt: true
 } as const;
@@ -588,7 +625,7 @@ function makeSessionCountingAggregationPipeline(
         localField: '_id',
         foreignField: 'viewed_id',
         as: 'sessionsArray',
-        pipeline: [{ $count: 'sessions' }]
+        pipeline: [{ $match: makeSessionQueryTtlFilter() }, { $count: 'sessions' }]
       }
     },
     {

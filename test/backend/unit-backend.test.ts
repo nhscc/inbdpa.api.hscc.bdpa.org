@@ -27,7 +27,8 @@ import {
   toPublicOpportunity,
   toPublicInfo,
   toPublicArticle,
-  userTypes
+  userTypes,
+  makeSessionQueryTtlFilter
 } from 'universe/backend/db';
 
 import { mockDateNowMs, useMockDateNow } from 'multiverse/mongo-common';
@@ -113,7 +114,9 @@ describe('::getAllUsers', () => {
             updatedAfter: undefined
           })
         ]).toStrictEqual([
-          ...dummyAppData.users.map((user) => [toPublicUser(user, undefined)]),
+          ...dummyAppData.users.map((user) => [
+            toPublicUser(user, { activeSessionCount: undefined, withFullName: false })
+          ]),
           []
         ]);
       },
@@ -141,7 +144,12 @@ describe('::getAllUsers', () => {
         updatedAfter: undefined
       })
     ).resolves.toStrictEqual(
-      dummyAppData.users.map((internalUser) => toPublicUser(internalUser, undefined))
+      dummyAppData.users.map((internalUser) =>
+        toPublicUser(internalUser, {
+          activeSessionCount: undefined,
+          withFullName: false
+        })
+      )
     );
 
     await expect(
@@ -152,12 +160,15 @@ describe('::getAllUsers', () => {
       })
     ).resolves.toStrictEqual(
       dummyAppData.users.map((internalUser) =>
-        toPublicUser(
-          internalUser,
-          dummyAppData.sessions.filter((session) =>
-            session.viewed_id?.equals(internalUser._id)
-          ).length
-        )
+        toPublicUser(internalUser, {
+          activeSessionCount: dummyAppData.sessions.filter(
+            (session) =>
+              session.viewed_id?.equals(internalUser._id) &&
+              session.lastRenewedDate.getMilliseconds() >
+                makeSessionQueryTtlFilter().lastRenewedDate.$gt.getMilliseconds()
+          ).length,
+          withFullName: true
+        })
       )
     );
   });

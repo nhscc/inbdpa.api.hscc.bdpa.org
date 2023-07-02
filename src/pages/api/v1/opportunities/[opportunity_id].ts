@@ -23,8 +23,8 @@ export default withMiddleware(
       case 'GET': {
         sendHttpOk(res, {
           opportunity: await getOpportunity({
-            opportunity_id,
-            includeSessionCount: false
+            apiVersion: 1,
+            opportunity_id
           })
         });
         break;

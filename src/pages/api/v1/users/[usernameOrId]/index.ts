@@ -16,13 +16,20 @@ export default withMiddleware(
     switch (req.method) {
       case 'GET': {
         sendHttpOk(res, {
-          user: await getUser({ usernameOrId, includeSessionCount: false })
+          user: await getUser({
+            apiVersion: 1,
+            usernameOrId
+          })
         });
         break;
       }
 
       case 'PATCH': {
-        await updateUser({ user_id: usernameOrId, data: req.body });
+        await updateUser({
+          apiVersion: 1,
+          user_id: usernameOrId,
+          data: req.body
+        });
         sendHttpOk(res);
         break;
       }

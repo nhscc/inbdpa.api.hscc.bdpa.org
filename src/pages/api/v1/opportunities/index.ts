@@ -16,9 +16,9 @@ export default withMiddleware(
       case 'GET': {
         sendHttpOk(res, {
           opportunities: await getAllOpportunities({
+            apiVersion: 1,
             after_id: req.query.after?.toString(),
-            updatedAfter: req.query.updatedAfter?.toString(),
-            includeSessionCount: false
+            updatedAfter: req.query.updatedAfter?.toString()
           })
         });
         break;
@@ -27,6 +27,7 @@ export default withMiddleware(
       case 'POST': {
         sendHttpOk(res, {
           opportunity: await createOpportunity({
+            apiVersion: 1,
             data: req.body,
             __provenance: await authorizationHeaderToOwnerAttribute(
               req.headers.authorization

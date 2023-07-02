@@ -91,7 +91,7 @@ export function getEnv<T extends Environment = Environment>() {
       ] as (keyof typeof env)[]
     ).forEach((name) => {
       const value = env[name];
-      if (!value || (Number.isInteger(value) && (value as number) <= 0)) {
+      if (!value || (Number.isSafeInteger(value) && (value as number) <= 0)) {
         errors.push(
           `bad ${name}, saw "${env[name]}" (expected a non-negative number)`
         );

@@ -28,20 +28,21 @@ jest.mock('multiverse/mongo-schema', (): typeof import('multiverse/mongo-schema'
 const testCollections = [
   'root.request-log',
   'root.limited-log',
-  'app.pages',
+  'app.articles',
+  'app.opportunities',
   'app.sessions',
   'app.users'
 ] as const;
 
-// TODO: replace with byte versions
 const withMockedEnv = mockEnvFactory({
   NODE_ENV: 'test',
-  PRUNE_DATA_MAX_LOGS_BYTES: '50mb',
+  PRUNE_DATA_MAX_LOGS_BYTES: '100mb',
   PRUNE_DATA_MAX_BANNED_BYTES: '10mb',
   // * Step 2: Add new env var default values here
-  PRUNE_DATA_MAX_PAGES_BYTES: '300mb',
+  PRUNE_DATA_MAX_ARTICLES_BYTES: '100mb',
+  PRUNE_DATA_MAX_OPPORTUNITIES_BYTES: '100mb',
   PRUNE_DATA_MAX_SESSIONS_BYTES: '20mb',
-  PRUNE_DATA_MAX_USERS_BYTES: '50mb'
+  PRUNE_DATA_MAX_USERS_BYTES: '100mb'
 });
 
 const importPruneData = protectedImportFactory<
@@ -151,7 +152,8 @@ it('rejects on bad environment', async () => {
   await withMockedEnv(() => importPruneData({ expectedExitCode: 2 }), {
     PRUNE_DATA_MAX_LOGS_BYTES: '',
     PRUNE_DATA_MAX_BANNED_BYTES: '',
-    PRUNE_DATA_MAX_PAGES_BYTES: '',
+    PRUNE_DATA_MAX_ARTICLES_BYTES: '',
+    PRUNE_DATA_MAX_OPPORTUNITIES_BYTES: '',
     PRUNE_DATA_MAX_SESSIONS_BYTES: '',
     PRUNE_DATA_MAX_USERS_BYTES: ''
   });
@@ -165,7 +167,11 @@ it('rejects on bad environment', async () => {
   });
 
   await withMockedEnv(() => importPruneData({ expectedExitCode: 2 }), {
-    PRUNE_DATA_MAX_PAGES_BYTES: ''
+    PRUNE_DATA_MAX_ARTICLES_BYTES: ''
+  });
+
+  await withMockedEnv(() => importPruneData({ expectedExitCode: 2 }), {
+    PRUNE_DATA_MAX_OPPORTUNITIES_BYTES: ''
   });
 
   await withMockedEnv(() => importPruneData({ expectedExitCode: 2 }), {
@@ -188,7 +194,8 @@ it('respects the limits imposed by PRUNE_DATA_MAX_X environment variables', asyn
   const expectedSizes = {
     'root.request-log': initialSizes['root.request-log'] / 2,
     'root.limited-log': initialSizes['root.limited-log'] / 2,
-    'app.pages': initialSizes['app.pages'] / 2,
+    'app.articles': initialSizes['app.articles'] / 2,
+    'app.opportunities': initialSizes['app.opportunities'] / 2,
     'app.sessions': initialSizes['app.sessions'] / 2,
     'app.users': initialSizes['app.users'] / 2
   };
@@ -196,7 +203,8 @@ it('respects the limits imposed by PRUNE_DATA_MAX_X environment variables', asyn
   await withMockedEnv(() => importPruneData({ expectedExitCode: 0 }), {
     PRUNE_DATA_MAX_LOGS_BYTES: String(expectedSizes['root.request-log']),
     PRUNE_DATA_MAX_BANNED_BYTES: String(expectedSizes['root.limited-log']),
-    PRUNE_DATA_MAX_PAGES_BYTES: String(expectedSizes['app.pages']),
+    PRUNE_DATA_MAX_ARTICLES_BYTES: String(expectedSizes['app.articles']),
+    PRUNE_DATA_MAX_OPPORTUNITIES_BYTES: String(expectedSizes['app.opportunities']),
     PRUNE_DATA_MAX_SESSIONS_BYTES: String(expectedSizes['app.sessions']),
     PRUNE_DATA_MAX_USERS_BYTES: String(expectedSizes['app.users'])
   });
@@ -211,14 +219,18 @@ it('respects the limits imposed by PRUNE_DATA_MAX_X environment variables', asyn
     expectedSizes['root.limited-log']
   );
 
-  expect(newSizes['app.pages']).toBeLessThanOrEqual(expectedSizes['app.pages']);
+  expect(newSizes['app.articles']).toBeLessThanOrEqual(expectedSizes['app.articles']);
+  expect(newSizes['app.opportunities']).toBeLessThanOrEqual(
+    expectedSizes['app.opportunities']
+  );
   expect(newSizes['app.sessions']).toBeLessThanOrEqual(expectedSizes['app.sessions']);
   expect(newSizes['app.users']).toBeLessThanOrEqual(expectedSizes['app.users']);
 
   await withMockedEnv(() => importPruneData({ expectedExitCode: 0 }), {
     PRUNE_DATA_MAX_LOGS_BYTES: '1',
     PRUNE_DATA_MAX_BANNED_BYTES: '1',
-    PRUNE_DATA_MAX_PAGES_BYTES: '1',
+    PRUNE_DATA_MAX_ARTICLES_BYTES: '1',
+    PRUNE_DATA_MAX_OPPORTUNITIES_BYTES: '1',
     PRUNE_DATA_MAX_SESSIONS_BYTES: '1',
     PRUNE_DATA_MAX_USERS_BYTES: '1'
   });
@@ -227,7 +239,8 @@ it('respects the limits imposed by PRUNE_DATA_MAX_X environment variables', asyn
 
   expect(latestSizes['root.request-log']).toBe(0);
   expect(latestSizes['root.limited-log']).toBe(0);
-  expect(latestSizes['app.pages']).toBe(0);
+  expect(latestSizes['app.articles']).toBe(0);
+  expect(latestSizes['app.opportunities']).toBe(0);
   expect(latestSizes['app.sessions']).toBe(0);
   expect(latestSizes['app.users']).toBe(0);
 });
@@ -242,7 +255,8 @@ it('only deletes entries if necessary', async () => {
     PRUNE_DATA_MAX_LOGS_BYTES: '100gb',
     PRUNE_DATA_MAX_BANNED_BYTES: '100gb',
     // * Step 5: Add new env vars high-prune-threshold values here
-    PRUNE_DATA_MAX_PAGES_BYTES: '100gb',
+    PRUNE_DATA_MAX_ARTICLES_BYTES: '100gb',
+    PRUNE_DATA_MAX_OPPORTUNITIES_BYTES: '100gb',
     PRUNE_DATA_MAX_SESSIONS_BYTES: '100gb',
     PRUNE_DATA_MAX_USERS_BYTES: '100gb'
   });
@@ -252,7 +266,8 @@ it('only deletes entries if necessary', async () => {
   expect(newSizes['root.request-log']).toBe(initialSizes['root.request-log']);
   expect(newSizes['root.limited-log']).toBe(initialSizes['root.limited-log']);
 
-  expect(newSizes['app.pages']).toBe(initialSizes['app.pages']);
+  expect(newSizes['app.articles']).toBe(initialSizes['app.articles']);
+  expect(newSizes['app.opportunities']).toBe(initialSizes['app.opportunities']);
   expect(newSizes['app.sessions']).toBe(initialSizes['app.sessions']);
   expect(newSizes['app.users']).toBe(initialSizes['app.users']);
 });

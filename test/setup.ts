@@ -1,12 +1,7 @@
 import { debugNamespace } from 'universe/constants';
 import { name as pkgName, version as pkgVersion } from 'package';
 import { verifyEnvironment } from '../expect-env';
-import {
-  TrialError,
-  ValidationError,
-  ValidationError,
-  makeNamedError
-} from 'universe/error';
+import { TrialError, ValidationError, makeNamedError } from 'universe/error';
 import { tmpdir } from 'node:os';
 import { promises as fs } from 'node:fs';
 import { resolve } from 'node:path';

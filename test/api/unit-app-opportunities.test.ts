@@ -26,14 +26,13 @@ jest.mock(
 
 setupMockBackend();
 
-describe('api/v1/blogs/:blogName', () => {
+describe('api/v1/opportunities', () => {
   describe('/ [GET]', () => {
     it('accepts GET requests', async () => {
       expect.hasAssertions();
 
       await testApiHandler({
-        handler: api.v1.blogsBlogname,
-        params: { blogName: 'blog-name' },
+        handler: api.v1.opportunities,
         test: async ({ fetch }) => {
           const [status, json] = await fetch({ method: 'GET' }).then(
             async (r) => [r.status, await r.json()] as [status: number, json: any]
@@ -41,20 +40,59 @@ describe('api/v1/blogs/:blogName', () => {
 
           expect(status).toBe(200);
           expect(json.success).toBeTrue();
-          expect(json.blog).toBeObject();
+          expect(json.opportunities).toBeArray();
           expect(Object.keys(json)).toHaveLength(2);
         }
       });
     });
   });
 
-  describe('/ [PATCH]', () => {
+  describe('/ [POST]', () => {
+    it('accepts POST requests', async () => {
+      expect.hasAssertions();
+
+      await testApiHandler({
+        handler: api.v1.opportunities,
+        test: async ({ fetch }) => {
+          const [status, json] = await fetch({ method: 'POST' }).then(
+            async (r) => [r.status, await r.json()] as [status: number, json: any]
+          );
+
+          expect(status).toBe(200);
+          expect(json.success).toBeTrue();
+          expect(json.opportunity).toBeObject();
+          expect(Object.keys(json)).toHaveLength(2);
+        }
+      });
+    });
+  });
+
+  describe('/:opportunity_id [GET]', () => {
+    it('accepts GET requests', async () => {
+      expect.hasAssertions();
+
+      await testApiHandler({
+        handler: api.v1.opportunitiesOpportunityid,
+        test: async ({ fetch }) => {
+          const [status, json] = await fetch({ method: 'GET' }).then(
+            async (r) => [r.status, await r.json()] as [status: number, json: any]
+          );
+
+          expect(status).toBe(200);
+          expect(json.success).toBeTrue();
+          expect(json.opportunity).toBeObject();
+          expect(Object.keys(json)).toHaveLength(2);
+        }
+      });
+    });
+  });
+
+  describe('/:opportunity_id [PATCH]', () => {
     it('accepts PATCH requests', async () => {
       expect.hasAssertions();
 
       await testApiHandler({
-        handler: api.v1.blogsBlogname,
-        params: { blogName: 'blog-name' },
+        handler: api.v1.opportunitiesOpportunityid,
         test: async ({ fetch }) => {
           const [status, json] = await fetch({ method: 'PATCH' }).then(
             async (r) => [r.status, await r.json()] as [status: number, json: any]
@@ -68,13 +106,33 @@ describe('api/v1/blogs/:blogName', () => {
     });
   });
 
-  describe('/pages [GET]', () => {
+  describe('/:opportunity_id [DELETE]', () => {
+    it('accepts DELETE requests', async () => {
+      expect.hasAssertions();
+
+      await testApiHandler({
+        handler: api.v1.opportunitiesOpportunityid,
+        test: async ({ fetch }) => {
+          const [status, json] = await fetch({ method: 'DELETE' }).then(
+            async (r) => [r.status, await r.json()] as [status: number, json: any]
+          );
+
+          expect(status).toBe(200);
+          expect(json.success).toBeTrue();
+          expect(Object.keys(json)).toHaveLength(1);
+        }
+      });
+    });
+  });
+});
+
+describe('api/v2/opportunities', () => {
+  describe('/ [GET]', () => {
     it('accepts GET requests', async () => {
       expect.hasAssertions();
 
       await testApiHandler({
-        handler: api.v1.blogsBlognamePages,
-        params: { blogName: 'blog-name' },
+        handler: api.v2.opportunities,
         test: async ({ fetch }) => {
           const [status, json] = await fetch({ method: 'GET' }).then(
             async (r) => [r.status, await r.json()] as [status: number, json: any]
@@ -82,20 +140,19 @@ describe('api/v1/blogs/:blogName', () => {
 
           expect(status).toBe(200);
           expect(json.success).toBeTrue();
-          expect(json.pages).toBeArray();
+          expect(json.opportunities).toBeArray();
           expect(Object.keys(json)).toHaveLength(2);
         }
       });
     });
   });
 
-  describe('/pages [POST]', () => {
+  describe('/ [POST]', () => {
     it('accepts POST requests', async () => {
       expect.hasAssertions();
 
       await testApiHandler({
-        handler: api.v1.blogsBlognamePages,
-        params: { blogName: 'blog-name' },
+        handler: api.v2.opportunities,
         test: async ({ fetch }) => {
           const [status, json] = await fetch({ method: 'POST' }).then(
             async (r) => [r.status, await r.json()] as [status: number, json: any]
@@ -103,20 +160,19 @@ describe('api/v1/blogs/:blogName', () => {
 
           expect(status).toBe(200);
           expect(json.success).toBeTrue();
-          expect(json.page).toBeObject();
+          expect(json.opportunity).toBeObject();
           expect(Object.keys(json)).toHaveLength(2);
         }
       });
     });
   });
 
-  describe('/pages/:pageName [GET]', () => {
+  describe('/:opportunity_id [GET]', () => {
     it('accepts GET requests', async () => {
       expect.hasAssertions();
 
       await testApiHandler({
-        handler: api.v1.blogsBlognamePagesPagename,
-        params: { blogName: 'blog-name', pageName: 'page-name' },
+        handler: api.v2.opportunitiesOpportunityid,
         test: async ({ fetch }) => {
           const [status, json] = await fetch({ method: 'GET' }).then(
             async (r) => [r.status, await r.json()] as [status: number, json: any]
@@ -124,20 +180,19 @@ describe('api/v1/blogs/:blogName', () => {
 
           expect(status).toBe(200);
           expect(json.success).toBeTrue();
-          expect(json.page).toBeObject();
+          expect(json.opportunity).toBeObject();
           expect(Object.keys(json)).toHaveLength(2);
         }
       });
     });
   });
 
-  describe('/pages/:pageName [PATCH]', () => {
+  describe('/:opportunity_id [PATCH]', () => {
     it('accepts PATCH requests', async () => {
       expect.hasAssertions();
 
       await testApiHandler({
-        handler: api.v1.blogsBlognamePagesPagename,
-        params: { blogName: 'blog-name', pageName: 'page-name' },
+        handler: api.v2.opportunitiesOpportunityid,
         test: async ({ fetch }) => {
           const [status, json] = await fetch({ method: 'PATCH' }).then(
             async (r) => [r.status, await r.json()] as [status: number, json: any]
@@ -151,13 +206,12 @@ describe('api/v1/blogs/:blogName', () => {
     });
   });
 
-  describe('/pages/:pageName [DELETE]', () => {
+  describe('/:opportunity_id [DELETE]', () => {
     it('accepts DELETE requests', async () => {
       expect.hasAssertions();
 
       await testApiHandler({
-        handler: api.v1.blogsBlognamePagesPagename,
-        params: { blogName: 'blog-name', pageName: 'page-name' },
+        handler: api.v2.opportunitiesOpportunityid,
         test: async ({ fetch }) => {
           const [status, json] = await fetch({ method: 'DELETE' }).then(
             async (r) => [r.status, await r.json()] as [status: number, json: any]
@@ -171,13 +225,12 @@ describe('api/v1/blogs/:blogName', () => {
     });
   });
 
-  describe('/pages/:pageName/sessions [GET]', () => {
+  describe('/:opportunity_id/sessions [GET]', () => {
     it('accepts GET requests', async () => {
       expect.hasAssertions();
 
       await testApiHandler({
-        handler: api.v1.blogsBlognamePagesPagenameSessions,
-        params: { blogName: 'blog-name', pageName: 'page-name' },
+        handler: api.v2.opportunitiesOpportunityidSessions,
         test: async ({ fetch }) => {
           const [status, json] = await fetch({ method: 'GET' }).then(
             async (r) => [r.status, await r.json()] as [status: number, json: any]
@@ -185,69 +238,8 @@ describe('api/v1/blogs/:blogName', () => {
 
           expect(status).toBe(200);
           expect(json.success).toBeTrue();
-          expect(json.active).toBeNumber();
+          expect(json.sessions).toBeArray();
           expect(Object.keys(json)).toHaveLength(2);
-        }
-      });
-    });
-  });
-
-  describe('/pages/:pageName/sessions [POST]', () => {
-    it('accepts POST requests', async () => {
-      expect.hasAssertions();
-
-      await testApiHandler({
-        handler: api.v1.blogsBlognamePagesPagenameSessions,
-        params: { blogName: 'blog-name', pageName: 'page-name' },
-        test: async ({ fetch }) => {
-          const [status, json] = await fetch({ method: 'POST' }).then(
-            async (r) => [r.status, await r.json()] as [status: number, json: any]
-          );
-
-          expect(status).toBe(200);
-          expect(json.success).toBeTrue();
-          expect(json.session_id).toBeString();
-          expect(Object.keys(json)).toHaveLength(2);
-        }
-      });
-    });
-  });
-
-  describe('/pages/:pageName/sessions/:session_id [PUT]', () => {
-    it('accepts PUT requests', async () => {
-      expect.hasAssertions();
-
-      await testApiHandler({
-        handler: api.v1.blogsBlognamePagesPagenameSessionsSessionid,
-        params: { blogName: 'blog-name', pageName: 'page-name', session_id: 'id' },
-        test: async ({ fetch }) => {
-          const [status, json] = await fetch({ method: 'PUT' }).then(
-            async (r) => [r.status, await r.json()] as [status: number, json: any]
-          );
-
-          expect(status).toBe(200);
-          expect(json.success).toBeTrue();
-          expect(Object.keys(json)).toHaveLength(1);
-        }
-      });
-    });
-  });
-
-  describe('/pages/:pageName/sessions/:session_id [DELETE]', () => {
-    it('accepts DELETE requests', async () => {
-      expect.hasAssertions();
-
-      await testApiHandler({
-        handler: api.v1.blogsBlognamePagesPagenameSessionsSessionid,
-        params: { blogName: 'blog-name', pageName: 'page-name', session_id: 'id' },
-        test: async ({ fetch }) => {
-          const [status, json] = await fetch({ method: 'DELETE' }).then(
-            async (r) => [r.status, await r.json()] as [status: number, json: any]
-          );
-
-          expect(status).toBe(200);
-          expect(json.success).toBeTrue();
-          expect(Object.keys(json)).toHaveLength(1);
         }
       });
     });

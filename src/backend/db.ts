@@ -398,7 +398,7 @@ export type PatchArticle = WithIncrementableViews<
  */
 export function toPublicUser(
   internalUser: InternalUser,
-  activeSessionCount: number
+  activeSessionCount: number | undefined
 ): PublicUser {
   return {
     user_id: internalUser._id.toString(),
@@ -406,7 +406,7 @@ export function toPublicUser(
     email: internalUser.email,
     salt: internalUser.salt,
     type: internalUser.type,
-    sessions: activeSessionCount,
+    ...(activeSessionCount !== undefined ? { sessions: activeSessionCount } : {}),
     createdAt: internalUser.createdAt,
     updatedAt: internalUser.updatedAt
   };
@@ -431,14 +431,14 @@ export function toPublicSession(internalSession: InternalSession): PublicSession
  */
 export function toPublicOpportunity(
   internalOpportunity: InternalOpportunity,
-  activeSessionCount: number
+  activeSessionCount: number | undefined
 ): PublicOpportunity {
   return {
     opportunity_id: internalOpportunity._id.toString(),
     creator_id: internalOpportunity.creator_id.toString(),
     contents: internalOpportunity.contents,
     title: internalOpportunity.title,
-    sessions: activeSessionCount,
+    ...(activeSessionCount !== undefined ? { sessions: activeSessionCount } : {}),
     createdAt: internalOpportunity.createdAt,
     updatedAt: internalOpportunity.updatedAt
   };
@@ -465,7 +465,7 @@ export function toPublicInfo(
  */
 export function toPublicArticle(
   internalArticle: InternalArticle,
-  activeSessionCount: number
+  activeSessionCount: number | undefined
 ): PublicArticle {
   return {
     article_id: internalArticle._id.toString(),
@@ -473,7 +473,7 @@ export function toPublicArticle(
     contents: internalArticle.contents,
     title: internalArticle.title,
     keywords: internalArticle.keywords,
-    sessions: activeSessionCount,
+    ...(activeSessionCount !== undefined ? { sessions: activeSessionCount } : {}),
     createdAt: internalArticle.createdAt,
     updatedAt: internalArticle.updatedAt
   };

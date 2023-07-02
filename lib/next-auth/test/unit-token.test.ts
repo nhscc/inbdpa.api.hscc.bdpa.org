@@ -272,25 +272,19 @@ describe('::deleteTokenById', () => {
     const errors: [params: Parameters<typeof deleteTokenById>[0], error: string][] = [
       [
         {} as unknown as Parameters<typeof deleteTokenById>[0],
-        ErrorMessage.InvalidItem('undefined', 'id')
+        ErrorMessage.InvalidObjectId('undefined')
       ],
-      [{ auth_id: undefined }, ErrorMessage.InvalidItem('undefined', 'id')],
-      [
-        { auth_id: null as unknown as ObjectId },
-        ErrorMessage.InvalidItem(null, 'id')
-      ],
+      [{ auth_id: undefined }, ErrorMessage.InvalidObjectId('undefined')],
+      [{ auth_id: null as unknown as ObjectId }, ErrorMessage.InvalidObjectId(null)],
       [
         { auth_id: false as unknown as ObjectId },
-        ErrorMessage.InvalidItem(false, 'id')
+        ErrorMessage.InvalidObjectId(false)
       ],
-      [
-        { auth_id: true as unknown as ObjectId },
-        ErrorMessage.InvalidItem(true, 'id')
-      ],
-      [{ auth_id: {} as unknown as ObjectId }, ErrorMessage.InvalidItem({}, 'id')],
-      [{ auth_id: '' }, ErrorMessage.InvalidItem('', 'id')],
-      [{ auth_id: 'xyz' }, ErrorMessage.InvalidItem('xyz', 'id')],
-      [{ auth_id: 5 as unknown as ObjectId }, ErrorMessage.InvalidItem(5, 'id')]
+      [{ auth_id: true as unknown as ObjectId }, ErrorMessage.InvalidObjectId(true)],
+      [{ auth_id: {} as unknown as ObjectId }, ErrorMessage.InvalidObjectId({})],
+      [{ auth_id: '' }, ErrorMessage.InvalidObjectId('')],
+      [{ auth_id: 'xyz' }, ErrorMessage.InvalidObjectId('xyz')],
+      [{ auth_id: 5 as unknown as ObjectId }, ErrorMessage.InvalidObjectId(5)]
     ];
 
     await expectExceptionsWithMatchingErrors(errors, (params) =>
@@ -1216,15 +1210,12 @@ describe('::updateTokenAttributesById', () => {
     ][] = [
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       [{} as any, ErrorMessage.InvalidSecret('update')],
-      [
-        { auth_id: undefined, update: {} },
-        ErrorMessage.InvalidItem('undefined', 'id')
-      ],
-      [{ auth_id: null, update: {} }, ErrorMessage.InvalidItem(null, 'id')],
-      [{ auth_id: false, update: {} }, ErrorMessage.InvalidItem(false, 'id')],
-      [{ auth_id: true, update: {} }, ErrorMessage.InvalidItem(true, 'id')],
-      [{ auth_id: {}, update: {} }, ErrorMessage.InvalidItem({}, 'id')],
-      [{ auth_id: 'xyz123', update: {} }, ErrorMessage.InvalidItem('xyz123', 'id')],
+      [{ auth_id: undefined, update: {} }, ErrorMessage.InvalidObjectId('undefined')],
+      [{ auth_id: null, update: {} }, ErrorMessage.InvalidObjectId(null)],
+      [{ auth_id: false, update: {} }, ErrorMessage.InvalidObjectId(false)],
+      [{ auth_id: true, update: {} }, ErrorMessage.InvalidObjectId(true)],
+      [{ auth_id: {}, update: {} }, ErrorMessage.InvalidObjectId({})],
+      [{ auth_id: 'xyz123', update: {} }, ErrorMessage.InvalidObjectId('xyz123')],
 
       [{ auth_id, update: undefined }, ErrorMessage.InvalidSecret('update')],
       [{ auth_id, update: null }, ErrorMessage.InvalidSecret('update')],

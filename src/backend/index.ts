@@ -29,23 +29,17 @@ import {
   type InternalArticle,
   type InternalOpportunity,
   type InternalSession,
-  type InternalInfo,
   type PublicUser,
   type PublicArticle,
   type PublicOpportunity,
   type PublicSession,
   type PublicInfo,
   type TokenAttributeOwner,
-  type UserType,
   type SessionView,
-  userTypes,
   toPublicUser,
   toPublicArticle,
-  toPublicInfo,
   toPublicOpportunity,
-  toPublicSession,
   publicArticleAggregation,
-  incompletePublicArticleProjection,
   publicOpportunityAggregation,
   incompletePublicOpportunityProjection,
   publicSessionProjection,
@@ -56,9 +50,7 @@ import {
   getOpportunitiesDb,
   getArticlesDb,
   getInfoDb,
-  makeSessionQueryTtlFilter,
-  UserSectionEntries,
-  UserSectionEntry
+  makeSessionQueryTtlFilter
 } from 'universe/backend/db';
 
 import { itemExists, itemToObjectId } from 'multiverse/mongo-item';
@@ -77,11 +69,11 @@ import {
 export async function getAllUsers({
   after_id,
   updatedAfter: updatedAfter_,
-  includeSessionCount
+  apiVersion
 }: {
   after_id: string | undefined;
   updatedAfter: string | undefined;
-  includeSessionCount: boolean;
+  apiVersion: 1 | 2;
 }): Promise<PublicUser[]> {
   const usersDb = await getUsersDb();
   const afterId = after_id ? itemToObjectId<UserId>(after_id) : undefined;
@@ -92,7 +84,7 @@ export async function getAllUsers({
     throw new ItemNotFoundError(after_id, 'after_id');
   }
 
-  if (updatedAfter !== undefined && !Number.isInteger(updatedAfter)) {
+  if (updatedAfter !== undefined && !Number.isSafeInteger(updatedAfter)) {
     throw new InvalidItemError(updatedAfter, 'updatedAfter');
   }
 
@@ -102,7 +94,7 @@ export async function getAllUsers({
   };
 
   // eslint-disable-next-line unicorn/prefer-ternary
-  if (includeSessionCount) {
+  if (apiVersion === 2) {
     return usersDb
       .aggregate<PublicUser>([{ $match: filter }, ...publicUserAggregation])
       .toArray();
@@ -136,7 +128,7 @@ export async function getAllSessions({
     throw new ItemNotFoundError(after_id, 'after_id');
   }
 
-  if (updatedAfter !== undefined && !Number.isInteger(updatedAfter)) {
+  if (updatedAfter !== undefined && !Number.isSafeInteger(updatedAfter)) {
     throw new InvalidItemError(updatedAfter, 'updatedAfter');
   }
 
@@ -161,11 +153,11 @@ export async function getAllSessions({
 export async function getAllOpportunities({
   after_id,
   updatedAfter: updatedAfter_,
-  includeSessionCount
+  apiVersion
 }: {
   after_id: string | undefined;
   updatedAfter: string | undefined;
-  includeSessionCount: boolean;
+  apiVersion: 1 | 2;
 }): Promise<PublicOpportunity[]> {
   const opportunitiesDb = await getOpportunitiesDb();
   const afterId = after_id ? itemToObjectId<OpportunityId>(after_id) : undefined;
@@ -176,7 +168,7 @@ export async function getAllOpportunities({
     throw new ItemNotFoundError(after_id, 'after_id');
   }
 
-  if (updatedAfter !== undefined && !Number.isInteger(updatedAfter)) {
+  if (updatedAfter !== undefined && !Number.isSafeInteger(updatedAfter)) {
     throw new InvalidItemError(updatedAfter, 'updatedAfter');
   }
 
@@ -186,7 +178,7 @@ export async function getAllOpportunities({
   };
 
   // eslint-disable-next-line unicorn/prefer-ternary
-  if (includeSessionCount) {
+  if (apiVersion === 2) {
     return opportunitiesDb
       .aggregate<PublicOpportunity>([
         { $match: filter },
@@ -223,7 +215,7 @@ export async function getAllArticles({
     throw new ItemNotFoundError(after_id, 'after_id');
   }
 
-  if (updatedAfter !== undefined && !Number.isInteger(updatedAfter)) {
+  if (updatedAfter !== undefined && !Number.isSafeInteger(updatedAfter)) {
     throw new InvalidItemError(updatedAfter, 'updatedAfter');
   }
 
@@ -239,10 +231,10 @@ export async function getAllArticles({
 
 export async function getUser({
   usernameOrId,
-  includeSessionCount
+  apiVersion
 }: {
   usernameOrId: string | undefined;
-  includeSessionCount: boolean;
+  apiVersion: 1 | 2;
 }): Promise<PublicUser> {
   if (!usernameOrId) {
     throw new InvalidItemError('usernameOrId', 'parameter');
@@ -262,13 +254,14 @@ export async function getUser({
     $or: [{ username: usernameOrId }, ...(userId ? [{ _id: userId }] : [])]
   };
 
-  const user = includeSessionCount
-    ? await usersDb
-        .aggregate<PublicUser>([{ $match: filter }, ...publicUserAggregation])
-        .next()
-    : await usersDb.findOne<PublicUser>(filter, {
-        projection: incompletePublicUserProjection
-      });
+  const user =
+    apiVersion === 2
+      ? await usersDb
+          .aggregate<PublicUser>([{ $match: filter }, ...publicUserAggregation])
+          .next()
+      : await usersDb.findOne<PublicUser>(filter, {
+          projection: incompletePublicUserProjection
+        });
 
   if (!user) {
     throw new ItemNotFoundError(usernameOrId, 'user');
@@ -302,10 +295,10 @@ export async function getSession({
 
 export async function getOpportunity({
   opportunity_id,
-  includeSessionCount
+  apiVersion
 }: {
   opportunity_id: string | undefined;
-  includeSessionCount: boolean;
+  apiVersion: 1 | 2;
 }): Promise<PublicOpportunity> {
   if (!opportunity_id) {
     throw new InvalidItemError('opportunity_id', 'parameter');
@@ -314,16 +307,17 @@ export async function getOpportunity({
   const opportunitiesDb = await getOpportunitiesDb();
   const filter = { _id: itemToObjectId(opportunity_id) };
 
-  const opportunity = includeSessionCount
-    ? await opportunitiesDb
-        .aggregate<PublicOpportunity>([
-          { $match: filter },
-          ...publicOpportunityAggregation
-        ])
-        .next()
-    : await opportunitiesDb.findOne<PublicOpportunity>(filter, {
-        projection: incompletePublicOpportunityProjection
-      });
+  const opportunity =
+    apiVersion === 2
+      ? await opportunitiesDb
+          .aggregate<PublicOpportunity>([
+            { $match: filter },
+            ...publicOpportunityAggregation
+          ])
+          .next()
+      : await opportunitiesDb.findOne<PublicOpportunity>(filter, {
+          projection: incompletePublicOpportunityProjection
+        });
 
   if (!opportunity) {
     throw new ItemNotFoundError(opportunity_id, 'opportunity');
@@ -500,18 +494,18 @@ export async function getUserConnections({
 
 export async function createUser({
   data,
-  allowFullName,
+  apiVersion,
   __provenance
 }: {
   data: LiteralUnknownUnion<NewUser>;
-  allowFullName: boolean;
+  apiVersion: 1 | 2;
   __provenance: TokenAttributeOwner;
 }): Promise<PublicUser> {
   if (typeof __provenance !== 'string') {
     throw new AppValidationError('invalid provenance token attribute owner');
   }
 
-  validateNewUserData(data, { allowFullName });
+  validateNewUserData(data, { allowFullName: apiVersion === 2 });
 
   const now = Date.now();
   const usersDb = await getUsersDb();
@@ -522,7 +516,7 @@ export async function createUser({
     __provenance,
     username,
     email,
-    fullName,
+    fullName: apiVersion === 2 ? fullName : null,
     type,
     salt: salt.toLowerCase(),
     key: key.toLowerCase(),
@@ -564,7 +558,7 @@ export async function createUser({
   }
 
   await (await getInfoDb()).updateOne({}, { $inc: { users: 1 } });
-  return toPublicUser(newUser, 0);
+  return toPublicUser(newUser, apiVersion === 2 ? 0 : undefined);
 }
 
 export async function createSession({
@@ -607,9 +601,11 @@ export async function createSession({
 
 export async function createOpportunity({
   data,
+  apiVersion,
   __provenance
 }: {
   data: LiteralUnknownUnion<NewOpportunity>;
+  apiVersion: 1 | 2;
   __provenance: TokenAttributeOwner;
 }): Promise<PublicOpportunity> {
   if (typeof __provenance !== 'string') {
@@ -638,7 +634,7 @@ export async function createOpportunity({
   await opportunitiesDb.insertOne(newOpportunity);
   await infoDb.updateOne({}, { $inc: { opportunities: 1 } });
 
-  return toPublicOpportunity(newOpportunity, 0);
+  return toPublicOpportunity(newOpportunity, apiVersion === 2 ? 0 : undefined);
 }
 
 export async function createArticle({
@@ -731,18 +727,18 @@ export async function createUserConnection({
 
 export async function updateUser({
   user_id,
-  allowFullName,
+  apiVersion,
   data
 }: {
   user_id: string | undefined;
-  allowFullName: boolean;
+  apiVersion: 1 | 2;
   data: LiteralUnknownUnion<PatchUser>;
 }): Promise<void> {
   if (!user_id) {
     throw new InvalidItemError('user_id', 'parameter');
   }
 
-  validatePatchUserData(data, { allowFullName });
+  validatePatchUserData(data, { allowFullName: apiVersion === 2 });
 
   const usersDb = await getUsersDb();
   const infoDb = await getInfoDb();
@@ -873,9 +869,6 @@ export async function updateArticle({
   }
 
   validatePatchArticleData(data);
-
-  // TODO: also +1 to views if necessary
-  // TODO: keywords need to be deduplicated and lowercased
 
   const articlesDb = await getArticlesDb();
   const infoDb = await getInfoDb();

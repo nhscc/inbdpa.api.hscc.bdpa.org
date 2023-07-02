@@ -79,7 +79,7 @@ export const ErrorMessage = {
           }s (inclusive)`
         : `${min} ${syntax === 'bytes' ? 'byte' : 'character'} string`
     }${nullable ? ' or null' : ''}`,
-  InvalidObjectId: (id: string) => `invalid ObjectId "${id}"`,
+  InvalidObjectId: (id: unknown) => `invalid ObjectId "${id}"`,
   UnknownField: (property: string) =>
     `encountered unknown or illegal field \`${property}\``,
   UnknownSpecifier: (property: string, sub = false) =>

@@ -16,9 +16,9 @@ export default withMiddleware(
       case 'GET': {
         sendHttpOk(res, {
           users: await getAllUsers({
+            apiVersion: 1,
             after_id: req.query.after?.toString(),
-            updatedAfter: req.query.updatedAfter?.toString(),
-            includeSessionCount: false
+            updatedAfter: req.query.updatedAfter?.toString()
           })
         });
         break;
@@ -27,6 +27,7 @@ export default withMiddleware(
       case 'POST': {
         sendHttpOk(res, {
           user: await createUser({
+            apiVersion: 1,
             data: req.body,
             __provenance: await authorizationHeaderToOwnerAttribute(
               req.headers.authorization

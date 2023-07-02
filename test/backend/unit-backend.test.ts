@@ -11,19 +11,23 @@ import {
   type InternalUser,
   type InternalSession,
   type NewUser,
-  type NewPage,
-  type PublicUserAdministrator,
-  type PublicUserBlogger,
-  type PublicPage,
-  type PatchUser,
-  type PatchBlog,
-  type PatchPage,
-  type NavigationLink,
+  type NewSession,
+  type NewOpportunity,
+  type NewArticle,
+  type PublicUser,
+  type PublicSession,
+  type PublicOpportunity,
   type PublicInfo,
-  userTypes,
+  type PublicArticle,
+  type PatchUser,
+  type PatchOpportunity,
+  type PatchArticle,
   toPublicUser,
-  toPublicPage,
-  toPublicBlog
+  toPublicSession,
+  toPublicOpportunity,
+  toPublicInfo,
+  toPublicArticle,
+  userTypes
 } from 'universe/backend/db';
 
 import { mockDateNowMs, useMockDateNow } from 'multiverse/mongo-common';
@@ -39,14 +43,19 @@ setupMemoryServerOverride();
 useMockDateNow();
 
 const withMockedEnv = mockEnvFactory({ NODE_ENV: 'test' });
-const sortedUsers = dummyAppData.users.slice().reverse();
 
 describe('::getAllUsers', () => {
   it('returns all users in order (latest first)', async () => {
     expect.hasAssertions();
 
-    await expect(Backend.getAllUsers({ after_id: undefined })).resolves.toStrictEqual(
-      sortedUsers.map((internalUser) => toPublicUser(internalUser))
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.users.map((internalUser) => toPublicUser(internalUser, undefined))
     );
   });
 
@@ -54,13 +63,22 @@ describe('::getAllUsers', () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.getAllUsers({ after_id: undefined })
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
     ).resolves.not.toStrictEqual([]);
 
     await (await getDb({ name: 'app' })).collection('users').deleteMany({});
-    await expect(Backend.getAllUsers({ after_id: undefined })).resolves.toStrictEqual(
-      []
-    );
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual([]);
   });
 
   it('supports pagination', async () => {
@@ -69,31 +87,100 @@ describe('::getAllUsers', () => {
     await withMockedEnv(
       async () => {
         expect([
-          await Backend.getAllUsers({ after_id: undefined }),
           await Backend.getAllUsers({
-            after_id: itemToStringId(sortedUsers[0])
+            apiVersion: 1,
+            after_id: undefined,
+            updatedAfter: undefined
           }),
           await Backend.getAllUsers({
-            after_id: itemToStringId(sortedUsers[1])
+            apiVersion: 1,
+            after_id: itemToStringId(dummyAppData.users[0]),
+            updatedAfter: undefined
           }),
           await Backend.getAllUsers({
-            after_id: itemToStringId(sortedUsers[2])
+            apiVersion: 1,
+            after_id: itemToStringId(dummyAppData.users[1]),
+            updatedAfter: undefined
           }),
           await Backend.getAllUsers({
-            after_id: itemToStringId(sortedUsers[3])
+            apiVersion: 1,
+            after_id: itemToStringId(dummyAppData.users[2]),
+            updatedAfter: undefined
           })
-        ]).toStrictEqual([...sortedUsers.map((user) => [toPublicUser(user)]), []]);
+        ]).toStrictEqual([
+          ...dummyAppData.users.map((user) => [toPublicUser(user, undefined)]),
+          []
+        ]);
       },
       { RESULTS_PER_PAGE: '1' }
+    );
+  });
+
+  it('supports updateAfter', async () => {
+    expect.hasAssertions();
+    // TODO: returns empty array for current/future timestamps
+  });
+
+  it('supports updateAfter + pagination', async () => {
+    expect.hasAssertions();
+    // TODO: returns empty array for current/future timestamps even if after_id exists
+  });
+
+  it('adds session property to output if and only if apiVersion === 2', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.users.map((internalUser) => toPublicUser(internalUser, undefined))
+    );
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 2,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.users.map((internalUser) =>
+        toPublicUser(
+          internalUser,
+          dummyAppData.sessions.filter((session) =>
+            session.viewed_id?.equals(internalUser._id)
+          ).length
+        )
+      )
     );
   });
 
   it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
     expect.hasAssertions();
 
-    await expect(Backend.getAllUsers({ after_id: 'fake-oid' })).rejects.toMatchObject(
-      { message: ErrorMessage.InvalidObjectId('fake-oid') }
-    );
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: 'fake-oid',
+        updatedAfter: undefined
+      })
+    ).rejects.toMatchObject({ message: ErrorMessage.InvalidObjectId('fake-oid') });
+  });
+
+  it('rejects if updatedAfter is not a number (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: 'NaN'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('NaN', 'updatedAfter')
+    });
   });
 
   it('rejects if after_id not found', async () => {
@@ -101,8 +188,10 @@ describe('::getAllUsers', () => {
 
     const after_id = new ObjectId().toString();
 
-    await expect(Backend.getAllUsers({ after_id })).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(after_id, 'user_id')
+    await expect(
+      Backend.getAllUsers({ apiVersion: 1, after_id, updatedAfter: undefined })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(after_id, 'after_id')
     });
   });
 });
@@ -2334,7 +2423,7 @@ describe('::authAppUser', () => {
   });
 });
 
-test('system info is updated when users/blogs and pages are created and deleted', async () => {
+test('system info is updated when users, opportunities, and articles are created and deleted', async () => {
   expect.hasAssertions();
 
   const { _id, ...expectedSystemInfo } = dummyAppData.info[0];
@@ -2420,4 +2509,8 @@ test('system info is updated when users/blogs and pages are created and deleted'
   await expect(Backend.getInfo()).resolves.toStrictEqual<PublicInfo>(
     expectedSystemInfo
   );
+});
+
+test('system info is updated when view counts on user profiles, opportunities, and articles are updated', async () => {
+  expect.hasAssertions();
 });

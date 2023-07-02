@@ -3,7 +3,6 @@ import { MongoServerError, ObjectId } from 'mongodb';
 
 import {
   AppValidationError,
-  AppValidationError,
   InvalidSecretError,
   ItemNotFoundError
 } from 'named-app-errors';

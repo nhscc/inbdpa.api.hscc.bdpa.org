@@ -50,6 +50,7 @@ const users: InternalUser[] = [
     email: 'v1-user-1@fake-email.com',
     type: 'administrator',
     fullName: null,
+    connections: [],
     sections: {
       about: 'Hi! I am me! Me am I!',
       education: [
@@ -94,6 +95,7 @@ const users: InternalUser[] = [
     email: 'user2@fake-email.com',
     type: 'staff',
     fullName: null,
+    connections: [],
     sections: {
       about: "I'm user two, nice to meet you :)",
       education: [
@@ -210,6 +212,7 @@ const users: InternalUser[] = [
     email: 'v2-user-x@fake-email.com',
     type: 'inner',
     fullName: 'Robert "Bobby" Axelrod',
+    connections: [],
     sections: {
       about: "Me? I'm worth a billion bucks!",
       education: [],
@@ -264,6 +267,7 @@ const opportunities: InternalOpportunity[] = [
   {
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
+    creator_id: users[0]._id,
     title: 'Opportunity #1',
     contents: 'This is the **Markdown Text** for Opportunity One.',
     views: 0,
@@ -273,6 +277,7 @@ const opportunities: InternalOpportunity[] = [
   {
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
+    creator_id: users[0]._id,
     title: 'Opportunity #2',
     contents: 'This is the **Markdown Text** for Opportunity Two!',
     views: 987,
@@ -282,6 +287,7 @@ const opportunities: InternalOpportunity[] = [
   {
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
+    creator_id: users[2]._id,
     title: 'Opportunity #3',
     contents: 'This is the **Markdown Text** for Opportunity Three!',
     views: 10 ** 7,
@@ -294,6 +300,7 @@ const articles: InternalArticle[] = [
   {
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
+    creator_id: users[0]._id,
     title: 'Article #1',
     contents: 'This is the **Markdown Text** for Article One.',
     views: 0,
@@ -304,6 +311,7 @@ const articles: InternalArticle[] = [
   {
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
+    creator_id: users[1]._id,
     title: 'Article #2',
     contents: 'This is the **Markdown Text** for Article Two!',
     views: 789,
@@ -314,6 +322,7 @@ const articles: InternalArticle[] = [
   {
     _id: new ObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
+    creator_id: users[1]._id,
     title: 'Article #3',
     contents: 'This is the **Markdown Text** for Article Three!',
     views: 10 ** 7 - 4,
@@ -328,7 +337,6 @@ const info: [InternalInfo] = [
     _id: new ObjectId(),
     articles: articles.length,
     opportunities: opportunities.length,
-    sessions: sessions.length,
     users: users.length,
     // eslint-disable-next-line unicorn/no-array-reduce
     views: [...articles, ...opportunities, ...users].reduce((total, obj) => {
@@ -336,6 +344,10 @@ const info: [InternalInfo] = [
     }, 0)
   }
 ];
+
+// * The first user and the third user are connected
+users[0].connections.push(users[2]._id);
+users[2].connections.push(users[0]._id);
 
 /**
  * Test data for the application database.

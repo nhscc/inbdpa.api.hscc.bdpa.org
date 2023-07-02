@@ -1,9 +1,9 @@
 import { getEnv } from 'universe/backend/env';
 import { getCommonSchemaConfig } from 'multiverse/mongo-common';
+import { getDb, type DbSchema } from 'multiverse/mongo-schema';
 
-import type { ObjectId, WithId, WithoutId } from 'mongodb';
+import type { Document, ObjectId, WithId, WithoutId } from 'mongodb';
 import type { TokenAttributes } from 'multiverse/next-auth';
-import type { DbSchema } from 'multiverse/mongo-schema';
 
 /**
  * A JSON representation of the backend Mongo database structure. This is used
@@ -23,9 +23,8 @@ export function getSchemaConfig(): DbSchema {
             indices: [
               { spec: 'key' },
               {
-                spec: 'username'
-                // * Uniqueness is handled at the application level since
-                // * usernames are nullable
+                spec: 'username',
+                options: { unique: true }
               },
               {
                 spec: 'email',
@@ -78,6 +77,48 @@ export function getSchemaConfig(): DbSchema {
   });
 }
 
+/**
+ * Return the well-known "users" collection after calling {@link getDb} on the
+ * `'app'` database.
+ */
+export async function getUsersDb() {
+  return (await getDb({ name: 'app' })).collection<InternalUser>('users');
+}
+
+/**
+ * Return the "sessions" collection after calling {@link getDb} on the `'app'`
+ * database.
+ */
+export async function getSessionsDb() {
+  return (await getDb({ name: 'app' })).collection<InternalSession>('sessions');
+}
+
+/**
+ * Return the "opportunities" collection after calling {@link getDb} on the
+ * `'app'` database.
+ */
+export async function getOpportunitiesDb() {
+  return (await getDb({ name: 'app' })).collection<InternalOpportunity>(
+    'opportunities'
+  );
+}
+
+/**
+ * Return the "info" collection after calling {@link getDb} on the `'app'`
+ * database.
+ */
+export async function getInfoDb() {
+  return (await getDb({ name: 'app' })).collection<InternalInfo>('info');
+}
+
+/**
+ * Return the "articles" collection after calling {@link getDb} on the `'app'`
+ * database.
+ */
+export async function getArticlesDb() {
+  return (await getDb({ name: 'app' })).collection<InternalArticle>('articles');
+}
+
 export type Username = string;
 export type Email = string;
 export type TokenAttributeOwner = TokenAttributes['owner'];
@@ -101,6 +142,23 @@ export const userTypes = ['inner', 'staff', 'administrator'] as const;
 export type UserType = (typeof userTypes)[number];
 
 /**
+ * An array of valid values for `view` in {@link InternalSession}.
+ */
+export const sessionViews = [
+  'home',
+  'auth',
+  'admin',
+  'article',
+  'opportunity',
+  'profile'
+] as const;
+
+/**
+ * Represents the type of authenticated user.
+ */
+export type SessionView = (typeof sessionViews)[number];
+
+/**
  * Represents an object that tracks time.
  */
 export type WithTimeTracking<T> = {
@@ -119,7 +177,7 @@ export type WithViewCounts<T> = {
  * Represents an object that counts active sessions.
  */
 export type WithSessionCounts<T> = {
-  sessions: number;
+  sessions?: number;
 } & T;
 
 /**
@@ -172,6 +230,7 @@ export type InternalUser = WithProvenance<
         fullName: string | null;
         type: UserType;
         sections: UserSectionEntries;
+        connections: UserId[];
       }>
     >
   >
@@ -213,7 +272,7 @@ export type InternalSession = WithProvenance<
   WithTimeTracking<
     WithId<{
       user_id: UserId | null;
-      view: 'home' | 'profile' | 'opportunity' | 'admin' | 'auth';
+      view: SessionView;
       viewed_id: UserId | OpportunityId | null;
       lastRenewedDate: Date;
     }>
@@ -235,9 +294,7 @@ export type PublicSession = Pick<
 /**
  * The shape of a new session.
  */
-export type NewSession = Partial<
-  Pick<PublicSession, 'user_id' | 'view' | 'viewed_id'>
->;
+export type NewSession = Pick<PublicSession, 'user_id' | 'viewed_id' | 'view'>;
 
 /**
  * The shape of an internal opportunity.
@@ -246,6 +303,7 @@ export type InternalOpportunity = WithProvenance<
   WithViewCounts<
     WithTimeTracking<
       WithId<{
+        creator_id: UserId;
         title: string;
         contents: string;
       }>
@@ -258,6 +316,7 @@ export type InternalOpportunity = WithProvenance<
  */
 export type PublicOpportunity = WithSessionCounts<
   Pick<InternalOpportunity, 'title' | 'contents' | 'createdAt' | 'updatedAt'> & {
+    creator_id: string;
     opportunity_id: string;
   }
 >;
@@ -265,7 +324,9 @@ export type PublicOpportunity = WithSessionCounts<
 /**
  * The shape of a new opportunity.
  */
-export type NewOpportunity = Pick<InternalOpportunity, 'title' | 'contents'>;
+export type NewOpportunity = Pick<InternalOpportunity, 'title' | 'contents'> & {
+  creator_id: string;
+};
 
 /**
  * The shape of a patch opportunity.
@@ -280,7 +341,6 @@ export type PatchOpportunity = WithIncrementableViews<
 export type InternalInfo = WithId<{
   articles: number;
   opportunities: number;
-  sessions: number;
   users: number;
   views: number;
 }>;
@@ -288,7 +348,10 @@ export type InternalInfo = WithId<{
 /**
  * The shape of public info.
  */
-export type PublicInfo = WithoutId<InternalInfo>;
+export type PublicInfo = WithoutId<InternalInfo> & {
+  articles?: number;
+  sessions: number;
+};
 
 /**
  * The shape of an internal article.
@@ -297,6 +360,7 @@ export type InternalArticle = WithProvenance<
   WithViewCounts<
     WithTimeTracking<
       WithId<{
+        creator_id: UserId;
         title: string;
         contents: string;
         keywords: string[];
@@ -312,15 +376,15 @@ export type PublicArticle = WithSessionCounts<
   Pick<
     InternalArticle,
     'title' | 'contents' | 'keywords' | 'createdAt' | 'updatedAt'
-  > & {
-    article_id: string;
-  }
+  > & { creator_id: string; article_id: string }
 >;
 
 /**
  * The shape of a new article.
  */
-export type NewArticle = Pick<InternalArticle, 'title' | 'contents' | 'keywords'>;
+export type NewArticle = Pick<InternalArticle, 'title' | 'contents' | 'keywords'> & {
+  creator_id: string;
+};
 
 /**
  * The shape of a patch article.
@@ -371,6 +435,7 @@ export function toPublicOpportunity(
 ): PublicOpportunity {
   return {
     opportunity_id: internalOpportunity._id.toString(),
+    creator_id: internalOpportunity.creator_id.toString(),
     contents: internalOpportunity.contents,
     title: internalOpportunity.title,
     sessions: activeSessionCount,
@@ -382,11 +447,14 @@ export function toPublicOpportunity(
 /**
  * Transforms the internal info data into a publicly consumable info.
  */
-export function toPublicInfo(internalInfo: InternalInfo): PublicInfo {
+export function toPublicInfo(
+  internalInfo: InternalInfo,
+  sessions: number
+): PublicInfo {
   return {
     articles: internalInfo.articles,
     opportunities: internalInfo.opportunities,
-    sessions: internalInfo.sessions,
+    sessions,
     users: internalInfo.users,
     views: internalInfo.views
   };
@@ -401,6 +469,7 @@ export function toPublicArticle(
 ): PublicArticle {
   return {
     article_id: internalArticle._id.toString(),
+    creator_id: internalArticle.creator_id.toString(),
     contents: internalArticle.contents,
     title: internalArticle.title,
     keywords: internalArticle.keywords,
@@ -411,10 +480,10 @@ export function toPublicArticle(
 }
 
 /**
- * A MongoDB cursor projection that transforms an internal user into a public
- * user.
+ * A MongoDB cursor projection that transforms an internal session into a public
+ * session.
  */
-export const publicUserProjection = {
+export const incompletePublicUserProjection = {
   _id: false,
   user_id: { $toString: '$_id' },
   username: true,
@@ -424,6 +493,15 @@ export const publicUserProjection = {
   createdAt: true,
   updatedAt: true
 } as const;
+
+/**
+ * A MongoDB aggregation pipeline that transforms internal users into public
+ * users, each including the `sessions` property. Prepend a `$match` stage to
+ * return only a subset of users.
+ */
+export const publicUserAggregation = makeSessionCountingAggregationPipeline(
+  incompletePublicUserProjection
+);
 
 /**
  * A MongoDB cursor projection that transforms an internal session into a public
@@ -443,7 +521,7 @@ export const publicSessionProjection = {
  * A MongoDB cursor projection that transforms an internal opportunity into a
  * public opportunity.
  */
-export const publicOpportunityProjection = {
+export const incompletePublicOpportunityProjection = {
   _id: false,
   opportunity_id: { $toString: '$_id' },
   title: true,
@@ -451,6 +529,15 @@ export const publicOpportunityProjection = {
   createdAt: true,
   updatedAt: true
 } as const;
+
+/**
+ * A MongoDB aggregation pipeline that transforms internal opportunities into
+ * public opportunities, each including the `sessions` property. Prepend a
+ * `$match` stage to return only a subset of opportunities.
+ */
+export const publicOpportunityAggregation = makeSessionCountingAggregationPipeline(
+  incompletePublicOpportunityProjection
+);
 
 /**
  * A MongoDB cursor projection that transforms the internal info data into a
@@ -462,7 +549,7 @@ export const publicInfoProjection = { _id: false } as const;
  * A MongoDB cursor projection that transforms an internal article into a public
  * article.
  */
-export const publicArticleProjection = {
+export const incompletePublicArticleProjection = {
   _id: false,
   article_id: { $toString: '$_id' },
   title: true,
@@ -471,3 +558,46 @@ export const publicArticleProjection = {
   createdAt: true,
   updatedAt: true
 } as const;
+
+/**
+ * A MongoDB aggregation pipeline that transforms internal opportunities into
+ * public opportunities, each including the `sessions` property. Prepend a
+ * `$match` stage to return only a subset of opportunities.
+ */
+export const publicArticleAggregation = makeSessionCountingAggregationPipeline(
+  incompletePublicArticleProjection
+);
+
+export function makeSessionQueryTtlFilter() {
+  return {
+    lastRenewedDate: {
+      $gt: new Date(Date.now() - getEnv().SESSION_EXPIRE_AFTER_SECONDS * 1000)
+    }
+  };
+}
+
+function makeSessionCountingAggregationPipeline(
+  primaryProjection: Document
+): Document[] {
+  return [
+    { $sort: { _id: 1 } },
+    { $limit: getEnv().RESULTS_PER_PAGE },
+    {
+      $lookup: {
+        from: 'sessions',
+        localField: '_id',
+        foreignField: 'viewed_id',
+        as: 'sessionsArray',
+        pipeline: [{ $count: 'sessions' }]
+      }
+    },
+    {
+      $set: {
+        sessionsObject: { $first: '$sessionsArray' }
+      }
+    },
+    { $set: { sessions: { $max: ['$sessionsObject.sessions', 0] } } },
+    { $project: { sessionsArray: false, sessionsObject: false } },
+    { $project: { ...primaryProjection, sessions: true } }
+  ];
+}

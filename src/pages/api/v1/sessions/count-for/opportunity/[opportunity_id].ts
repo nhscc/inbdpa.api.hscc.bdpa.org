@@ -1,19 +1,27 @@
+/* eslint-disable unicorn/filename-case */
 import { withMiddleware } from 'universe/backend/middleware';
-import { getInfo } from 'universe/backend';
 import { sendHttpOk } from 'multiverse/next-api-respond';
+
+import { getSessionsCountFor } from 'universe/backend';
 
 // ? This is a NextJS special "config" export
 export { defaultConfig as config } from 'universe/backend/api';
 
 export const metadata = {
-  descriptor: '/info'
+  descriptor: '/sessions/count-for/opportunity/:opportunity_id'
 };
 
 export default withMiddleware(
   async (req, res) => {
+    const opportunity_id = req.query.opportunity_id?.toString();
+
     switch (req.method) {
       case 'GET': {
-        sendHttpOk(res, { info: await getInfo({ includeArticleCount: false }) });
+        sendHttpOk(res, {
+          active: await getSessionsCountFor('opportunity', {
+            viewed_id: opportunity_id
+          })
+        });
         break;
       }
     }

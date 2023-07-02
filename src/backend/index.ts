@@ -6,578 +6,553 @@ import { getEnv } from 'universe/backend/env';
 
 import {
   ErrorMessage,
-  GuruMeditationError,
+  AppValidationError,
   InvalidItemError,
   ItemNotFoundError,
   ValidationError
 } from 'universe/error';
 
 import {
-  type Email,
   type UserId,
-  type BlogId,
+  type ArticleId,
+  type OpportunityId,
   type SessionId,
-  type Username,
   type NewUser,
-  type NewPage,
+  type NewArticle,
+  type NewOpportunity,
+  type NewSession,
   type PatchUser,
-  type PatchPage,
-  type PatchBlog,
+  type PatchArticle,
+  type PatchOpportunity,
   type InternalUser,
-  type InternalPage,
+  type InternalArticle,
+  type InternalOpportunity,
   type InternalSession,
   type InternalInfo,
   type PublicUser,
-  type PublicBlog,
-  type PublicPage,
+  type PublicArticle,
+  type PublicOpportunity,
+  type PublicSession,
   type PublicInfo,
-  type PublicPageMetadata,
   type TokenAttributeOwner,
-  type NavigationLink,
   type UserType,
+  type SessionView,
   userTypes,
   toPublicUser,
-  toPublicPage,
-  publicUserProjection,
-  publicPageProjection,
-  publicBlogProjection,
-  publicPageMetadataProjection
+  toPublicArticle,
+  toPublicInfo,
+  toPublicOpportunity,
+  toPublicSession,
+  publicArticleAggregation,
+  incompletePublicArticleProjection,
+  publicOpportunityAggregation,
+  incompletePublicOpportunityProjection,
+  publicSessionProjection,
+  publicUserAggregation,
+  incompletePublicUserProjection,
+  getUsersDb,
+  getSessionsDb,
+  getOpportunitiesDb,
+  getArticlesDb,
+  getInfoDb,
+  makeSessionQueryTtlFilter,
+  UserSectionEntries,
+  UserSectionEntry
 } from 'universe/backend/db';
 
-import { isPlainObject } from 'multiverse/is-plain-object';
-import { getDb } from 'multiverse/mongo-schema';
 import { itemExists, itemToObjectId } from 'multiverse/mongo-item';
 
 import type { LiteralUnknownUnion } from 'types/global';
-
-const emailRegex = /^[\w%+.-]+@[\d.a-z-]+\.[a-z]{2,}$/i;
-const usernameRegex = /^[\d_a-z-]+$/;
-const alphanumericRegex = /^[\w-]+$/i;
-const hexadecimalRegex = /^[\dA-Fa-f]+$/;
-const hrefRegex = /^(\/\/|[\w-])/i;
-
-/**
- * Validate a username string for correctness.
- */
-function isValidUsername(username: unknown): username is Username {
-  return (
-    typeof username == 'string' &&
-    usernameRegex.test(username) &&
-    username.length >= getEnv().MIN_USER_NAME_LENGTH &&
-    username.length <= getEnv().MAX_USER_NAME_LENGTH
-  );
-}
-
-/**
- * Validate a generic _subset_ of a new (`required: true`) or patch (`required:
- * false`) user data object.
- */
-function validateGenericUserData(
-  data: unknown,
-  { required }: { required: true }
-): asserts data is Pick<NewUser, 'email' | 'salt' | 'key'>;
-function validateGenericUserData(
-  data: unknown,
-  { required }: { required: false }
-): asserts data is Pick<PatchUser, 'email' | 'salt' | 'key'>;
-function validateGenericUserData(
-  data: unknown,
-  { required }: { required: boolean }
-): void {
-  if (!isPlainObject(data)) {
-    throw new ValidationError(ErrorMessage.InvalidJSON());
-  }
-
-  const {
-    USER_KEY_LENGTH,
-    USER_SALT_LENGTH,
-    MIN_USER_EMAIL_LENGTH,
-    MAX_USER_EMAIL_LENGTH
-  } = getEnv();
-
-  if (
-    (required || (!required && data.email !== undefined)) &&
-    (typeof data.email != 'string' ||
-      !emailRegex.test(data.email) ||
-      data.email.length < MIN_USER_EMAIL_LENGTH ||
-      data.email.length > MAX_USER_EMAIL_LENGTH)
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength(
-        'email',
-        MIN_USER_EMAIL_LENGTH,
-        MAX_USER_EMAIL_LENGTH,
-        'valid email address'
-      )
-    );
-  }
-
-  if (
-    (required || (!required && data.salt !== undefined)) &&
-    (typeof data.salt != 'string' ||
-      !hexadecimalRegex.test(data.salt) ||
-      data.salt.length != USER_SALT_LENGTH)
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength('salt', USER_SALT_LENGTH, null, 'hexadecimal')
-    );
-  }
-
-  if (
-    (required || (!required && data.key !== undefined)) &&
-    (typeof data.key != 'string' ||
-      !hexadecimalRegex.test(data.key) ||
-      data.key.length != USER_KEY_LENGTH)
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength('key', USER_KEY_LENGTH, null, 'hexadecimal')
-    );
-  }
-}
-
-/**
- * Validate a patch blog data object.
- */
-function validatePatchBlogData(data: unknown): asserts data is PatchBlog {
-  if (!isPlainObject(data)) {
-    throw new ValidationError(ErrorMessage.InvalidJSON());
-  }
-
-  const {
-    MAX_BLOG_PAGE_NAME_LENGTH,
-    MAX_NAV_LINK_HREF_LENGTH,
-    MAX_NAV_LINK_TEXT_LENGTH
-  } = getEnv();
-
-  if (
-    data.name !== undefined &&
-    (!data.name ||
-      typeof data.name !== 'string' ||
-      data.name.length < 1 ||
-      data.name.length > MAX_BLOG_PAGE_NAME_LENGTH ||
-      !alphanumericRegex.test(data.name))
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength(
-        'name',
-        1,
-        MAX_BLOG_PAGE_NAME_LENGTH,
-        'alphanumeric'
-      )
-    );
-  }
-
-  if (
-    data.rootPage !== undefined &&
-    (!data.rootPage ||
-      typeof data.rootPage !== 'string' ||
-      data.rootPage.length < 1 ||
-      data.rootPage.length > MAX_BLOG_PAGE_NAME_LENGTH ||
-      !alphanumericRegex.test(data.rootPage))
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength(
-        'rootPage',
-        1,
-        MAX_BLOG_PAGE_NAME_LENGTH,
-        'alphanumeric'
-      )
-    );
-  }
-
-  if (data.navLinks !== undefined) {
-    if (!data.navLinks || !Array.isArray(data.navLinks)) {
-      throw new ValidationError(ErrorMessage.InvalidFieldValue('navLinks'));
-    }
-
-    if (data.navLinks.length > navLinkUpperLimit) {
-      throw new ValidationError(ErrorMessage.TooMany('navLinks', navLinkUpperLimit));
-    }
-
-    for (const link of data.navLinks) {
-      if (!link || !isPlainObject(link) || Object.keys(link).length !== 2) {
-        throw new ValidationError(
-          ErrorMessage.InvalidArrayValue('navLinks', JSON.stringify(link))
-        );
-      }
-
-      if (
-        typeof link.href !== 'string' ||
-        !link.href ||
-        link.href.length > MAX_NAV_LINK_HREF_LENGTH ||
-        !hrefRegex.test(link.href)
-      ) {
-        throw new ValidationError(
-          ErrorMessage.InvalidObjectKeyValue('navLink.href', String(link.href))
-        );
-      }
-
-      if (
-        typeof link.text !== 'string' ||
-        !link.text ||
-        link.text.length > MAX_NAV_LINK_TEXT_LENGTH
-      ) {
-        throw new ValidationError(
-          ErrorMessage.InvalidObjectKeyValue('navLink.text', String(link.text))
-        );
-      }
-    }
-  }
-}
-
-/**
- * Validate a generic _subset_ of a new (`required: true`) or patch (`required:
- * false`) page data object.
- */
-function validateGenericPageData(
-  data: unknown,
-  { required }: { required: true }
-): asserts data is Pick<NewPage, 'contents'>;
-function validateGenericPageData(
-  data: unknown,
-  { required }: { required: false }
-): asserts data is Pick<PatchPage, 'contents'>;
-function validateGenericPageData(
-  data: unknown,
-  { required }: { required: boolean }
-): void | never {
-  if (!isPlainObject(data)) {
-    throw new ValidationError(ErrorMessage.InvalidJSON());
-  }
-
-  const { MAX_BLOG_PAGE_CONTENTS_LENGTH_BYTES: maxBlogPageContentsLengthBytes } =
-    getEnv();
-
-  if (
-    (required || (!required && data.contents !== undefined)) &&
-    (typeof data.contents != 'string' ||
-      data.contents.length > maxBlogPageContentsLengthBytes)
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength(
-        'contents',
-        0,
-        maxBlogPageContentsLengthBytes,
-        'bytes'
-      )
-    );
-  }
-}
-
-/**
- * Transforms a username-or-email string into a user object.
- */
-async function usernameOrEmailParamToUser<T extends InternalUser>(
-  usernameOrEmail: Username | Email | undefined
-): Promise<T>;
-async function usernameOrEmailParamToUser<T extends PublicUser | PublicBlog>(
-  usernameOrEmail: Username | Email | undefined,
-  projection: object
-): Promise<T>;
-async function usernameOrEmailParamToUser<
-  T extends InternalUser | PublicUser | PublicBlog
->(usernameOrEmail: Username | Email | undefined, projection?: object): Promise<T> {
-  if (!usernameOrEmail) {
-    throw new InvalidItemError('usernameOrEmail', 'parameter');
-  }
-
-  const db = await getDb({ name: 'app' });
-  const usersDb = db.collection<InternalUser>('users');
-
-  const user = await usersDb.findOne<T>(
-    {
-      $or: [{ username: usernameOrEmail }, { email: usernameOrEmail }]
-    },
-    { projection }
-  );
-
-  if (!user) {
-    throw new ItemNotFoundError(usernameOrEmail, 'user');
-  }
-
-  return user;
-}
-
-async function blogNameToUser<T extends InternalUser>(
-  blogName: string | undefined
-): Promise<T>;
-async function blogNameToUser<T extends PublicUser | PublicBlog>(
-  blogName: string | undefined,
-  projection: object
-): Promise<T>;
-async function blogNameToUser<T extends InternalUser | PublicUser | PublicBlog>(
-  blogName: string | undefined,
-  projection?: object
-): Promise<T> {
-  if (!blogName) {
-    throw new InvalidItemError('blogName', 'parameter');
-  }
-
-  const db = await getDb({ name: 'app' });
-  const usersDb = db.collection<InternalUser>('users');
-  const user = await usersDb.findOne<T>({ blogName }, { projection });
-
-  if (!user) {
-    throw new ItemNotFoundError(blogName, 'blog');
-  }
-
-  return user;
-}
-
-async function pageNameToPage<T extends InternalPage>(
-  pageName: string | undefined,
-  blog_id: BlogId
-): Promise<T>;
-async function pageNameToPage<T extends PublicPage | PublicPageMetadata>(
-  pageName: string | undefined,
-  blog_id: BlogId,
-  projection: object
-): Promise<T>;
-async function pageNameToPage<
-  T extends InternalPage | PublicPage | PublicPageMetadata
->(pageName: string | undefined, blog_id: BlogId, projection?: object): Promise<T> {
-  if (!pageName) {
-    throw new InvalidItemError('pageName', 'parameter');
-  }
-
-  const db = await getDb({ name: 'app' });
-  const pagesDb = db.collection<InternalPage>('pages');
-  const page = await pagesDb.findOne<T>({ blog_id, name: pageName }, { projection });
-
-  if (!page) {
-    throw new ItemNotFoundError(pageName, 'page');
-  }
-
-  return page;
-}
-
-/**
- * The maximum amount of navLinks that can be associated with a blog. This is a
- * hardcoded limit.
- */
-export const navLinkUpperLimit = 5 as const;
-
-/**
- * The default `navLinks` value for newly created blogs (users).
- */
-export const defaultNavLinks: NavigationLink[] = [{ href: 'home', text: 'home' }];
-
-/**
- * The default home page for newly created blogs (users).
- */
-export const defaultHomePage: Required<NewPage> = {
-  name: 'home',
-  contents: '# Hello World\n\nWelcome **to** _Inbdpa!_'
-};
+import {
+  validateNewArticleData,
+  validateNewOpportunityData,
+  validateNewSessionData,
+  validateNewUserData,
+  validatePatchArticleData,
+  validatePatchOpportunityData,
+  validatePatchUserData
+} from './validators';
 
 export async function getAllUsers({
-  after_id
+  after_id,
+  updatedAfter: updatedAfter_,
+  includeSessionCount
 }: {
   after_id: string | undefined;
+  updatedAfter: string | undefined;
+  includeSessionCount: boolean;
 }): Promise<PublicUser[]> {
-  const db = await getDb({ name: 'app' });
-  const usersDb = db.collection<InternalUser>('users');
+  const usersDb = await getUsersDb();
   const afterId = after_id ? itemToObjectId<UserId>(after_id) : undefined;
+  const updatedAfter =
+    updatedAfter_ !== undefined ? Number(updatedAfter_) : undefined;
 
   if (afterId && !(await itemExists(usersDb, afterId))) {
-    throw new ItemNotFoundError(after_id, 'user_id');
+    throw new ItemNotFoundError(after_id, 'after_id');
   }
 
+  if (updatedAfter !== undefined && !Number.isInteger(updatedAfter)) {
+    throw new InvalidItemError(updatedAfter, 'updatedAfter');
+  }
+
+  const filter = {
+    ...(afterId ? { _id: { $gt: afterId } } : {}),
+    ...(updatedAfter !== undefined ? { updatedAt: { $gt: updatedAfter } } : {})
+  };
+
+  // eslint-disable-next-line unicorn/prefer-ternary
+  if (includeSessionCount) {
+    return usersDb
+      .aggregate<PublicUser>([{ $match: filter }, ...publicUserAggregation])
+      .toArray();
+  } else {
+    return (
+      usersDb
+        // eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+        .find<PublicUser>(filter, {
+          projection: incompletePublicUserProjection,
+          limit: getEnv().RESULTS_PER_PAGE,
+          sort: { _id: 1 }
+        })
+        .toArray()
+    );
+  }
+}
+
+export async function getAllSessions({
+  after_id,
+  updatedAfter: updatedAfter_
+}: {
+  after_id: string | undefined;
+  updatedAfter: string | undefined;
+}): Promise<PublicSession[]> {
+  const sessionsDb = await getSessionsDb();
+  const afterId = after_id ? itemToObjectId<SessionId>(after_id) : undefined;
+  const updatedAfter =
+    updatedAfter_ !== undefined ? Number(updatedAfter_) : undefined;
+
+  if (afterId && !(await itemExists(sessionsDb, afterId))) {
+    throw new ItemNotFoundError(after_id, 'after_id');
+  }
+
+  if (updatedAfter !== undefined && !Number.isInteger(updatedAfter)) {
+    throw new InvalidItemError(updatedAfter, 'updatedAfter');
+  }
+
+  const filter = {
+    ...(afterId ? { _id: { $gt: afterId } } : {}),
+    ...(updatedAfter !== undefined ? { updatedAt: { $gt: updatedAfter } } : {}),
+    ...makeSessionQueryTtlFilter()
+  };
+
   return (
-    usersDb
+    sessionsDb
       // eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
-      .find<PublicUser>(afterId ? { _id: { $lt: afterId } } : {}, {
-        projection: publicUserProjection,
+      .find<PublicSession>(filter, {
+        projection: publicSessionProjection,
         limit: getEnv().RESULTS_PER_PAGE,
-        sort: { _id: -1 }
+        sort: { _id: 1 }
       })
       .toArray()
   );
 }
 
-export async function getBlogPagesMetadata({
-  blogName
+export async function getAllOpportunities({
+  after_id,
+  updatedAfter: updatedAfter_,
+  includeSessionCount
 }: {
-  blogName: string | undefined;
-}): Promise<PublicPageMetadata[]> {
-  const db = await getDb({ name: 'app' });
-  const pagesDb = db.collection<InternalPage>('pages');
-  const { _id: blog_id } = await blogNameToUser(blogName);
+  after_id: string | undefined;
+  updatedAfter: string | undefined;
+  includeSessionCount: boolean;
+}): Promise<PublicOpportunity[]> {
+  const opportunitiesDb = await getOpportunitiesDb();
+  const afterId = after_id ? itemToObjectId<OpportunityId>(after_id) : undefined;
+  const updatedAfter =
+    updatedAfter_ !== undefined ? Number(updatedAfter_) : undefined;
 
-  return pagesDb
-    .find<PublicPage>(
-      { blog_id },
+  if (afterId && !(await itemExists(opportunitiesDb, afterId))) {
+    throw new ItemNotFoundError(after_id, 'after_id');
+  }
+
+  if (updatedAfter !== undefined && !Number.isInteger(updatedAfter)) {
+    throw new InvalidItemError(updatedAfter, 'updatedAfter');
+  }
+
+  const filter = {
+    ...(afterId ? { _id: { $gt: afterId } } : {}),
+    ...(updatedAfter !== undefined ? { updatedAt: { $gt: updatedAfter } } : {})
+  };
+
+  // eslint-disable-next-line unicorn/prefer-ternary
+  if (includeSessionCount) {
+    return opportunitiesDb
+      .aggregate<PublicOpportunity>([
+        { $match: filter },
+        ...publicOpportunityAggregation
+      ])
+      .toArray();
+  } else {
+    return (
+      opportunitiesDb
+        // eslint-disable-next-line unicorn/no-array-callback-reference, unicorn/no-array-method-this-argument
+        .find<PublicOpportunity>(filter, {
+          projection: incompletePublicOpportunityProjection,
+          limit: getEnv().RESULTS_PER_PAGE,
+          sort: { _id: 1 }
+        })
+        .toArray()
+    );
+  }
+}
+
+export async function getAllArticles({
+  after_id,
+  updatedAfter: updatedAfter_
+}: {
+  after_id: string | undefined;
+  updatedAfter: string | undefined;
+}): Promise<PublicArticle[]> {
+  const articlesDb = await getArticlesDb();
+  const afterId = after_id ? itemToObjectId<ArticleId>(after_id) : undefined;
+  const updatedAfter =
+    updatedAfter_ !== undefined ? Number(updatedAfter_) : undefined;
+
+  if (afterId && !(await itemExists(articlesDb, afterId))) {
+    throw new ItemNotFoundError(after_id, 'after_id');
+  }
+
+  if (updatedAfter !== undefined && !Number.isInteger(updatedAfter)) {
+    throw new InvalidItemError(updatedAfter, 'updatedAfter');
+  }
+
+  const filter = {
+    ...(afterId ? { _id: { $gt: afterId } } : {}),
+    ...(updatedAfter !== undefined ? { updatedAt: { $gt: updatedAfter } } : {})
+  };
+
+  return articlesDb
+    .aggregate<PublicArticle>([{ $match: filter }, ...publicArticleAggregation])
+    .toArray();
+}
+
+export async function getUser({
+  usernameOrId,
+  includeSessionCount
+}: {
+  usernameOrId: string | undefined;
+  includeSessionCount: boolean;
+}): Promise<PublicUser> {
+  if (!usernameOrId) {
+    throw new InvalidItemError('usernameOrId', 'parameter');
+  }
+
+  const usersDb = await getUsersDb();
+
+  const userId = (() => {
+    try {
+      return itemToObjectId(usernameOrId);
+    } catch {
+      return undefined;
+    }
+  })();
+
+  const filter = {
+    $or: [{ username: usernameOrId }, ...(userId ? [{ _id: userId }] : [])]
+  };
+
+  const user = includeSessionCount
+    ? await usersDb
+        .aggregate<PublicUser>([{ $match: filter }, ...publicUserAggregation])
+        .next()
+    : await usersDb.findOne<PublicUser>(filter, {
+        projection: incompletePublicUserProjection
+      });
+
+  if (!user) {
+    throw new ItemNotFoundError(usernameOrId, 'user');
+  }
+
+  return user;
+}
+
+export async function getSession({
+  session_id
+}: {
+  session_id: string | undefined;
+}): Promise<PublicSession> {
+  if (!session_id) {
+    throw new InvalidItemError('session_id', 'parameter');
+  }
+
+  const sessionsDb = await getSessionsDb();
+
+  const session = await sessionsDb.findOne<PublicSession>(
+    { _id: itemToObjectId(session_id), ...makeSessionQueryTtlFilter() },
+    { projection: publicSessionProjection }
+  );
+
+  if (!session) {
+    throw new ItemNotFoundError(session_id, 'session');
+  }
+
+  return session;
+}
+
+export async function getOpportunity({
+  opportunity_id,
+  includeSessionCount
+}: {
+  opportunity_id: string | undefined;
+  includeSessionCount: boolean;
+}): Promise<PublicOpportunity> {
+  if (!opportunity_id) {
+    throw new InvalidItemError('opportunity_id', 'parameter');
+  }
+
+  const opportunitiesDb = await getOpportunitiesDb();
+  const filter = { _id: itemToObjectId(opportunity_id) };
+
+  const opportunity = includeSessionCount
+    ? await opportunitiesDb
+        .aggregate<PublicOpportunity>([
+          { $match: filter },
+          ...publicOpportunityAggregation
+        ])
+        .next()
+    : await opportunitiesDb.findOne<PublicOpportunity>(filter, {
+        projection: incompletePublicOpportunityProjection
+      });
+
+  if (!opportunity) {
+    throw new ItemNotFoundError(opportunity_id, 'opportunity');
+  }
+
+  return opportunity;
+}
+
+export async function getInfo({
+  includeArticleCount
+}: {
+  includeArticleCount: boolean;
+}): Promise<PublicInfo> {
+  const [info, sessions] = await Promise.all([
+    (
+      await getInfoDb()
+    ).findOne<Omit<PublicInfo, 'sessions'>>(
+      {},
       {
-        projection: publicPageMetadataProjection,
+        projection: {
+          _id: false,
+          ...(includeArticleCount ? {} : { articles: false })
+        }
+      }
+    ),
+    (await getSessionsDb()).countDocuments()
+  ]);
+
+  if (!info) {
+    throw new AppValidationError('system info is missing');
+  }
+
+  return {
+    ...info,
+    sessions
+  };
+}
+
+export async function getArticle({
+  article_id
+}: {
+  article_id: string | undefined;
+}): Promise<PublicArticle> {
+  if (!article_id) {
+    throw new InvalidItemError('article_id', 'parameter');
+  }
+
+  const articlesDb = await getArticlesDb();
+  const article = await articlesDb
+    .aggregate<PublicArticle>([
+      { $match: { _id: itemToObjectId(article_id) } },
+      ...publicArticleAggregation
+    ])
+    .next();
+
+  if (!article) {
+    throw new ItemNotFoundError(article_id, 'article');
+  }
+
+  return article;
+}
+
+export async function getSessionsFor(
+  view: Extract<SessionView, 'opportunity' | 'article' | 'profile'>,
+  {
+    viewed_id,
+    after_id
+  }: { viewed_id: string | undefined; after_id: string | undefined }
+): Promise<PublicSession[]> {
+  if (!viewed_id) {
+    throw new InvalidItemError(
+      `${view === 'profile' ? 'user' : view}_id`,
+      'parameter'
+    );
+  }
+
+  const sessionsDb = await getSessionsDb();
+  const afterId = after_id ? itemToObjectId(after_id) : undefined;
+
+  if (afterId && !(await itemExists(sessionsDb, afterId))) {
+    throw new ItemNotFoundError(after_id, 'after_id');
+  }
+
+  // ! Probably not a problem that we race these promises here...
+  const dbMap = {
+    article: getArticlesDb(),
+    opportunity: getOpportunitiesDb(),
+    profile: getUsersDb()
+  } as const; /*satisfies Record<typeof view, unknown>*/
+
+  const xDb = await dbMap[view];
+  const viewedId = itemToObjectId(viewed_id);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!viewedId || !(await itemExists<any>(xDb, viewedId))) {
+    throw new ItemNotFoundError(
+      viewed_id,
+      `${view === 'profile' ? 'user' : view}_id`
+    );
+  }
+
+  return sessionsDb
+    .find<PublicSession>(
+      {
+        viewed_id: viewedId,
+        ...(afterId ? { _id: { $gt: afterId } } : {}),
+        ...makeSessionQueryTtlFilter()
+      },
+      {
+        projection: publicSessionProjection,
         limit: getEnv().RESULTS_PER_PAGE,
-        sort: { _id: -1 }
+        sort: { _id: 1 }
       }
     )
     .toArray();
 }
 
-export async function getUser({
-  usernameOrEmail
-}: {
-  usernameOrEmail: Username | Email | undefined;
-}): Promise<PublicUser> {
-  return usernameOrEmailParamToUser(usernameOrEmail, publicUserProjection);
-}
+export async function getSessionsCountFor(
+  view: Extract<SessionView, 'opportunity' | 'profile'>,
+  { viewed_id }: { viewed_id: string | undefined }
+): Promise<number> {
+  if (!viewed_id) {
+    throw new InvalidItemError(
+      `${view === 'profile' ? 'user' : view}_id`,
+      'parameter'
+    );
+  }
 
-export async function getBlog({
-  blogName
-}: {
-  blogName: string | undefined;
-}): Promise<PublicBlog> {
-  return blogNameToUser(blogName, publicBlogProjection);
-}
+  const sessionsDb = await getSessionsDb();
 
-export async function getPage({
-  blogName,
-  pageName
-}: {
-  blogName: string | undefined;
-  pageName: string | undefined;
-}): Promise<PublicPage> {
-  const { _id: blog_id } = await blogNameToUser(blogName);
-  return pageNameToPage(pageName, blog_id, publicPageProjection);
-}
+  // ! Probably not a problem that we race these promises here...
+  const dbMap = {
+    opportunity: getOpportunitiesDb(),
+    profile: getUsersDb()
+  } as const; /*satisfies Record<typeof view, unknown>*/
 
-export async function getInfo(): Promise<PublicInfo> {
-  const db = await getDb({ name: 'app' });
-  const infoDb = db.collection<InternalInfo>('info');
+  const xDb = await dbMap[view];
+  const viewedId = itemToObjectId(viewed_id);
 
-  return (
-    (await infoDb.findOne<PublicInfo>({}, { projection: { _id: false } })) ||
-    toss(new GuruMeditationError('system info is missing'))
-  );
-}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!(await itemExists<any>(xDb, viewedId))) {
+    throw new ItemNotFoundError(
+      viewed_id,
+      `${view === 'profile' ? 'user' : view}_id`
+    );
+  }
 
-export async function getPageSessionsCount({
-  blogName,
-  pageName
-}: {
-  blogName: string | undefined;
-  pageName: string | undefined;
-}): Promise<number> {
-  const { _id: blog_id } = await blogNameToUser(blogName);
-  const { _id: page_id } = await pageNameToPage(pageName, blog_id);
-
-  const db = await getDb({ name: 'app' });
-  const sessionDb = db.collection<InternalSession>('sessions');
-
-  return sessionDb.countDocuments({
-    page_id,
-    lastRenewedDate: {
-      $gt: new Date(Date.now() - getEnv().SESSION_EXPIRE_AFTER_SECONDS * 1000)
-    }
+  return sessionsDb.countDocuments({
+    viewed_id: viewedId,
+    ...makeSessionQueryTtlFilter()
   });
+}
+
+export async function getUserConnections({
+  user_id
+}: {
+  user_id: string | undefined;
+}): Promise<string[]> {
+  if (!user_id) {
+    throw new InvalidItemError('user_id', 'parameter');
+  }
+
+  const usersDb = await getUsersDb();
+  const userId = itemToObjectId(user_id);
+
+  const { connections } =
+    (await usersDb.findOne<Pick<InternalUser, 'connections'>>(
+      { _id: userId },
+      { projection: { connections: true } }
+    )) || toss(new ItemNotFoundError(user_id, 'user'));
+
+  return connections.map((connection) => connection.toString());
 }
 
 export async function createUser({
   data,
+  allowFullName,
   __provenance
 }: {
   data: LiteralUnknownUnion<NewUser>;
+  allowFullName: boolean;
   __provenance: TokenAttributeOwner;
 }): Promise<PublicUser> {
   if (typeof __provenance !== 'string') {
-    throw new GuruMeditationError('invalid provenance token attribute owner');
+    throw new AppValidationError('invalid provenance token attribute owner');
   }
 
-  validateGenericUserData(data, { required: true });
+  validateNewUserData(data, { allowFullName });
 
-  const { MAX_USER_NAME_LENGTH, MIN_USER_NAME_LENGTH, MAX_BLOG_NAME_LENGTH } =
-    getEnv();
+  const now = Date.now();
+  const usersDb = await getUsersDb();
+  const { username, email, fullName, key, salt, type } = data;
 
-  if ('username' in data && !isValidUsername(data.username)) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength(
-        'username',
-        MIN_USER_NAME_LENGTH,
-        MAX_USER_NAME_LENGTH,
-        'lowercase alphanumeric'
-      )
-    );
-  }
+  const newUser: InternalUser = {
+    _id: new ObjectId(),
+    __provenance,
+    username,
+    email,
+    fullName,
+    type,
+    salt: salt.toLowerCase(),
+    key: key.toLowerCase(),
+    views: 0,
+    connections: [],
+    createdAt: now,
+    updatedAt: now,
+    sections: {
+      about: null,
+      education: [],
+      experience: [],
+      skills: [],
+      volunteering: []
+    }
+  };
 
-  if (
-    !('type' in data) ||
-    typeof data.type !== 'string' ||
-    !userTypes.includes(data.type as UserType)
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidFieldValue('type', undefined, userTypes)
-    );
-  }
+  // TODO: the rest of the below should probably be a transaction
 
-  if (data.type === 'administrator' && 'blogName' in data && data.blogName) {
-    throw new ValidationError(ErrorMessage.UnknownField('blogName'));
-  } else if (
-    data.type === 'blogger' &&
-    (!('blogName' in data) ||
-      typeof data.blogName !== 'string' ||
-      !alphanumericRegex.test(data.blogName) ||
-      data.blogName.length < 1 ||
-      data.blogName.length > MAX_BLOG_NAME_LENGTH)
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength(
-        'blogName',
-        1,
-        MAX_BLOG_NAME_LENGTH,
-        'alphanumeric'
-      )
-    );
-  }
-
-  const { email, username, key, salt, type, blogName, ...rest } = data as NewUser;
-  const restKeys = Object.keys(rest);
-
-  if (restKeys.length != 0) {
-    throw new ValidationError(ErrorMessage.UnknownField(restKeys[0]));
-  }
-
-  const db = await getDb({ name: 'app' });
-  const usersDb = db.collection<InternalUser>('users');
-
-  if (username && (await itemExists(usersDb, { key: 'username', id: username }))) {
-    throw new ValidationError(ErrorMessage.DuplicateFieldValue('username'));
-  }
-
-  if (blogName && (await itemExists(usersDb, { key: 'blogName', id: blogName }))) {
-    throw new ValidationError(ErrorMessage.DuplicateFieldValue('blogName'));
-  }
-
-  const newUser: InternalUser = Object.assign(
-    {
-      _id: new ObjectId(),
-      __provenance,
-      username: username || null,
-      salt: salt.toLowerCase(),
-      email,
-      key: key.toLowerCase()
-    },
-    type === 'administrator'
-      ? { type: 'administrator' as const }
-      : {
-          type: 'blogger' as const,
-          createdAt: Date.now(),
-          blogName,
-          blogRootPage: 'home',
-          banned: false,
-          navLinks: defaultNavLinks
-        }
-  );
-
-  // * At this point, we can finally trust this data is valid and not malicious
   try {
     await usersDb.insertOne(newUser);
   } catch (error) {
     /* istanbul ignore else */
     if (
       error instanceof MongoServerError &&
-      error.code == 11_000 &&
+      error.code === 11_000 &&
+      error.keyPattern?.username !== undefined
+    ) {
+      throw new ValidationError(ErrorMessage.DuplicateFieldValue('username'));
+    } else if (
+      error instanceof MongoServerError &&
+      error.code === 11_000 &&
       error.keyPattern?.email !== undefined
     ) {
       throw new ValidationError(ErrorMessage.DuplicateFieldValue('email'));
@@ -587,210 +562,232 @@ export async function createUser({
     throw error;
   }
 
-  const infoDb = db.collection<InternalInfo>('info');
-  const promises: Promise<unknown>[] = [infoDb.updateOne({}, { $inc: { users: 1 } })];
-
-  // TODO: this should be implemented as a transaction
-  if (data.type === 'blogger') {
-    promises.push(
-      infoDb.updateOne({}, { $inc: { blogs: 1, pages: 1 } }),
-      db.collection<InternalPage>('pages').insertOne({
-        __provenance,
-        _id: new ObjectId(),
-        blog_id: newUser._id,
-        createdAt: Date.now(),
-        totalViews: 0,
-        ...defaultHomePage
-      })
-    );
-  }
-
-  await Promise.all(promises);
-  return toPublicUser(newUser);
-}
-
-export async function createPage({
-  blogName,
-  data,
-  __provenance
-}: {
-  blogName: string | undefined;
-  data: LiteralUnknownUnion<NewPage>;
-  __provenance: TokenAttributeOwner;
-}): Promise<PublicPage> {
-  if (typeof __provenance !== 'string') {
-    throw new GuruMeditationError('invalid provenance token attribute owner');
-  }
-
-  validateGenericPageData(data, { required: true });
-
-  const { MAX_BLOG_PAGE_NAME_LENGTH, MAX_USER_BLOG_PAGES } = getEnv();
-
-  if (
-    !('name' in data) ||
-    !data.name ||
-    typeof data.name !== 'string' ||
-    data.name.length < 1 ||
-    data.name.length > MAX_BLOG_PAGE_NAME_LENGTH ||
-    !alphanumericRegex.test(data.name)
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength(
-        'name',
-        1,
-        MAX_BLOG_PAGE_NAME_LENGTH,
-        'alphanumeric'
-      )
-    );
-  }
-
-  const { name, contents, ...rest } = data;
-  const restKeys = Object.keys(rest);
-
-  if (restKeys.length != 0) {
-    throw new ValidationError(ErrorMessage.UnknownField(restKeys[0]));
-  }
-
-  const db = await getDb({ name: 'app' });
-  const pagesDb = db.collection<InternalPage>('pages');
-  const { _id: blog_id } = await blogNameToUser(blogName);
-  const numOfPages = await pagesDb.countDocuments({ blog_id });
-
-  if (numOfPages >= MAX_USER_BLOG_PAGES) {
-    throw new ValidationError(ErrorMessage.TooMany('pages', MAX_USER_BLOG_PAGES));
-  }
-
-  const newPage: InternalPage = {
-    _id: new ObjectId(),
-    __provenance,
-    blog_id,
-    name,
-    contents,
-    createdAt: Date.now(),
-    totalViews: 0
-  };
-
-  // * At this point, we can finally trust this data is valid and not malicious
-  try {
-    await pagesDb.insertOne(newPage);
-  } catch (error) {
-    /* istanbul ignore else */
-    if (error instanceof MongoServerError && error.code == 11_000) {
-      throw new ValidationError(ErrorMessage.DuplicateFieldValue('pageName'));
-    }
-
-    /* istanbul ignore next */
-    throw error;
-  }
-
-  await db.collection<InternalInfo>('info').updateOne({}, { $inc: { pages: 1 } });
-  return toPublicPage(newPage);
+  await (await getInfoDb()).updateOne({}, { $inc: { users: 1 } });
+  return toPublicUser(newUser, 0);
 }
 
 export async function createSession({
-  blogName,
-  pageName,
+  data,
+  includeArticleInErrorMessage,
   __provenance
 }: {
-  blogName: string | undefined;
-  pageName: string | undefined;
+  data: LiteralUnknownUnion<NewSession>;
+  includeArticleInErrorMessage: boolean;
   __provenance: TokenAttributeOwner;
 }): Promise<SessionId> {
   if (typeof __provenance !== 'string') {
-    throw new GuruMeditationError('invalid provenance token attribute owner');
+    throw new AppValidationError('invalid provenance token attribute owner');
   }
 
-  const db = await getDb({ name: 'app' });
-  const sessionDb = db.collection<InternalSession>('sessions');
-  const { _id: blog_id } = await blogNameToUser(blogName);
-  const { _id: page_id } = await pageNameToPage(pageName, blog_id);
+  validateNewSessionData(data, { includeArticleInErrorMessage });
+
+  const now = Date.now();
+  const sessionDb = await getSessionsDb();
+  const { user_id, view, viewed_id } = data;
+
+  const userId = user_id !== null ? itemToObjectId(user_id) : null;
+  const viewedId = viewed_id !== null ? itemToObjectId(viewed_id) : null;
 
   const newSession: InternalSession = {
     _id: new ObjectId(),
     __provenance,
-    page_id,
+    createdAt: now,
+    updatedAt: now,
+    user_id: userId,
+    view,
+    viewed_id: viewedId,
     // ? Using Date.now ensures we pick up Date mocking when testing
-    lastRenewedDate: new Date(Date.now())
+    lastRenewedDate: new Date(now)
   };
 
-  // * At this point, we can finally trust this data is valid and not malicious
   await sessionDb.insertOne(newSession);
   return newSession._id;
 }
 
+export async function createOpportunity({
+  data,
+  __provenance
+}: {
+  data: LiteralUnknownUnion<NewOpportunity>;
+  __provenance: TokenAttributeOwner;
+}): Promise<PublicOpportunity> {
+  if (typeof __provenance !== 'string') {
+    throw new AppValidationError('invalid provenance token attribute owner');
+  }
+
+  validateNewOpportunityData(data);
+
+  const now = Date.now();
+  const opportunitiesDb = await getOpportunitiesDb();
+  const infoDb = await getInfoDb();
+  const { contents, creator_id, title } = data;
+
+  const newOpportunity: InternalOpportunity = {
+    _id: new ObjectId(),
+    __provenance,
+    contents,
+    creator_id: itemToObjectId(creator_id),
+    title,
+    views: 0,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  // TODO: the rest of the below should probably be a transaction
+  await opportunitiesDb.insertOne(newOpportunity);
+  await infoDb.updateOne({}, { $inc: { opportunities: 1 } });
+
+  return toPublicOpportunity(newOpportunity, 0);
+}
+
+export async function createArticle({
+  data,
+  __provenance
+}: {
+  data: LiteralUnknownUnion<NewArticle>;
+  __provenance: TokenAttributeOwner;
+}): Promise<PublicArticle> {
+  if (typeof __provenance !== 'string') {
+    throw new AppValidationError('invalid provenance token attribute owner');
+  }
+
+  validateNewArticleData(data);
+
+  const now = Date.now();
+  const articlesDb = await getArticlesDb();
+  const infoDb = await getInfoDb();
+  const { contents, creator_id, keywords, title } = data;
+
+  const newArticle: InternalArticle = {
+    _id: new ObjectId(),
+    __provenance,
+    contents,
+    creator_id: itemToObjectId(creator_id),
+    keywords: Array.from(new Set(keywords.map((s) => s.toLowerCase()))),
+    title,
+    views: 0,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  // TODO: the rest of the below should probably be a transaction
+  await articlesDb.insertOne(newArticle);
+  await infoDb.updateOne({}, { $inc: { articles: 1 } });
+
+  return toPublicArticle(newArticle, 0);
+}
+
+export async function createUserConnection({
+  user_id,
+  connection_id
+}: {
+  user_id: string | undefined;
+  connection_id: string | undefined;
+}): Promise<void> {
+  if (!user_id) {
+    throw new InvalidItemError('user_id', 'parameter');
+  }
+
+  if (!connection_id) {
+    throw new InvalidItemError('connection_id', 'parameter');
+  }
+
+  const userId = itemToObjectId(user_id);
+  const connectionId = itemToObjectId(connection_id);
+
+  if (userId.equals(connectionId)) {
+    throw new ValidationError(ErrorMessage.IllegalCyclicalConnection());
+  }
+
+  const usersDb = await getUsersDb();
+
+  if (!(await itemExists(usersDb, connectionId))) {
+    throw new ItemNotFoundError(connection_id, 'connection');
+  }
+
+  const now = Date.now();
+
+  // TODO: all of this together is probably better in a transaction
+  const [userIdResult] = await Promise.all([
+    usersDb.updateOne(
+      { _id: userId },
+      { $push: { connections: connectionId }, $set: { updatedAt: now } }
+    ),
+    usersDb.updateOne(
+      { _id: connectionId },
+      { $push: { connections: userId }, $set: { updatedAt: now } }
+    )
+  ]);
+
+  if (userIdResult.matchedCount !== 1) {
+    throw new ItemNotFoundError(user_id, 'user');
+  }
+
+  if (userIdResult.modifiedCount !== 1) {
+    throw new ValidationError(ErrorMessage.DuplicateConnection());
+  }
+}
+
 export async function updateUser({
-  usernameOrEmail,
+  user_id,
+  allowFullName,
   data
 }: {
-  usernameOrEmail: Username | Email | undefined;
+  user_id: string | undefined;
+  allowFullName: boolean;
   data: LiteralUnknownUnion<PatchUser>;
 }): Promise<void> {
-  const { _id: user_id, type } = await usernameOrEmailParamToUser(usernameOrEmail);
-
-  if (data && !Object.keys(data).length) {
-    throw new ValidationError(ErrorMessage.EmptyJSONBody());
+  if (!user_id) {
+    throw new InvalidItemError('user_id', 'parameter');
   }
 
-  validateGenericUserData(data, { required: false });
+  validatePatchUserData(data, { allowFullName });
 
-  if ('banned' in data && data.banned !== undefined) {
-    if (type === 'administrator') {
-      throw new ValidationError(ErrorMessage.UnknownField('banned'));
-    } else if (typeof data.banned !== 'boolean') {
-      throw new ValidationError(
-        ErrorMessage.InvalidFieldValue('banned', data.banned, ['true', 'false'])
-      );
-    }
-  }
+  const usersDb = await getUsersDb();
+  const infoDb = await getInfoDb();
+  const { email, fullName, key, salt, sections, views } = data;
+  const shouldIncrementViews = !!views;
 
-  const { email, key, salt, banned, ...rest } = data as PatchUser;
-  const restKeys = Object.keys(rest);
+  const sectionUpdates = Object.fromEntries(
+    Object.entries(sections || {}).map(([key, value]) => {
+      return key === 'skills' && Array.isArray(value)
+        ? [
+            `sections.${key}`,
+            Array.from(new Set(value.map((s) => s.toString().toLowerCase())))
+          ]
+        : [`sections.${key}`, value];
+    })
+  );
 
-  if (restKeys.length != 0) {
-    throw new ValidationError(ErrorMessage.UnknownField(restKeys[0]));
-  }
-
-  // ? Key update requires salt update and vice-versa
-  if (!!key !== !!salt) {
-    const { USER_SALT_LENGTH: maxSaltLength, USER_KEY_LENGTH: maxKeyLength } =
-      getEnv();
-
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength(
-        !!key ? 'salt' : 'key',
-        !!key ? maxSaltLength : maxKeyLength,
-        null,
-        'hexadecimal'
-      )
-    );
-  }
-
-  const db = await getDb({ name: 'app' });
-  const usersDb = db.collection<InternalUser>('users');
-
-  // * At this point, we can finally trust this data is not malicious, but not
-  // * necessarily valid...
   try {
-    const result = await usersDb.updateOne(
-      { _id: user_id },
-      {
-        $set: {
-          ...(email ? { email } : {}),
-          ...(salt ? { salt: salt.toLowerCase() } : {}),
-          ...(key ? { key: key.toLowerCase() } : {}),
-          ...(typeof banned === 'boolean' ? { banned } : {})
+    const [result] = await Promise.all([
+      usersDb.updateOne(
+        { _id: itemToObjectId(user_id) },
+        {
+          $set: {
+            updatedAt: Date.now(),
+            ...(email ? { email } : {}),
+            ...(fullName ? { fullName } : {}),
+            ...(key ? { key: key.toLowerCase() } : {}),
+            ...(salt ? { salt: salt.toLowerCase() } : {}),
+            ...(shouldIncrementViews ? { $inc: { views: 1 } } : {}),
+            ...sectionUpdates
+          }
         }
-      }
-    );
+      ),
+      shouldIncrementViews
+        ? infoDb.updateOne({}, { $inc: { views: 1 } })
+        : Promise.resolve()
+    ]);
 
     assert(
       result.matchedCount === 1,
-      `expected 1 affected document, ${result.matchedCount} were affected`
+      `expected 1 matched document, ${result.matchedCount} were matched`
     );
   } catch (error) {
     if (
       error instanceof MongoServerError &&
-      error.code == 11_000 &&
+      error.code === 11_000 &&
       error.keyPattern?.email !== undefined
     ) {
       throw new ValidationError(ErrorMessage.DuplicateFieldValue('email'));
@@ -800,214 +797,275 @@ export async function updateUser({
   }
 }
 
-export async function updateBlog({
-  blogName,
-  data
-}: {
-  blogName: string | undefined;
-  data: LiteralUnknownUnion<PatchBlog>;
-}): Promise<void> {
-  const { _id: blog_id } = await blogNameToUser(blogName);
-
-  if (data && !Object.keys(data).length) {
-    throw new ValidationError(ErrorMessage.EmptyJSONBody());
-  }
-
-  validatePatchBlogData(data);
-
-  const { name, rootPage, navLinks, ...rest } = data;
-  const restKeys = Object.keys(rest);
-
-  if (restKeys.length != 0) {
-    throw new ValidationError(ErrorMessage.UnknownField(restKeys[0]));
-  }
-
-  const db = await getDb({ name: 'app' });
-  const usersDb = db.collection<InternalUser>('users');
-
-  if (name && (await itemExists(usersDb, { key: 'blogName', id: name }))) {
-    throw new ValidationError(ErrorMessage.DuplicateFieldValue('blogName'));
-  }
-
-  // * At this point, we can finally trust this data is valid and not malicious
-  const result = await usersDb.updateOne(
-    { _id: blog_id },
-    {
-      $set: {
-        ...(name ? { blogName: name } : {}),
-        ...(rootPage ? { blogRootPage: rootPage } : {}),
-        ...(navLinks ? { navLinks } : {})
-      }
-    }
-  );
-
-  assert(
-    result.matchedCount === 1,
-    `expected 1 affected document, ${result.matchedCount} were affected`
-  );
-}
-
-export async function updatePage({
-  blogName,
-  pageName,
-  data
-}: {
-  blogName: string | undefined;
-  pageName: string | undefined;
-  data: LiteralUnknownUnion<PatchPage>;
-}): Promise<void> {
-  const { _id: blog_id } = await blogNameToUser(blogName);
-  const { _id: page_id } = await pageNameToPage(pageName, blog_id);
-
-  if (data && !Object.keys(data).length) {
-    throw new ValidationError(ErrorMessage.EmptyJSONBody());
-  }
-
-  validateGenericPageData(data, { required: false });
-
-  if (
-    'totalViews' in data &&
-    data.totalViews !== undefined &&
-    data.totalViews !== 'increment'
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidFieldValue('totalViews', data.totalViews, ['increment'])
-    );
-  }
-
-  const { totalViews, contents, ...rest } = data as PatchPage;
-  const restKeys = Object.keys(rest);
-
-  if (restKeys.length != 0) {
-    throw new ValidationError(ErrorMessage.UnknownField(restKeys[0]));
-  }
-
-  const db = await getDb({ name: 'app' });
-  const pagesDb = db.collection<InternalPage>('pages');
-
-  // * At this point, we can finally trust this data is valid and not malicious
-  const result = await pagesDb.updateOne(
-    { _id: page_id },
-    {
-      ...(contents !== undefined ? { $set: { contents } } : {}),
-      ...(!!totalViews ? { $inc: { totalViews: 1 } } : {})
-    }
-  );
-
-  assert(
-    result.matchedCount === 1,
-    `expected 1 affected document, ${result.matchedCount} were affected`
-  );
-}
-
 export async function renewSession({
-  sessionId
+  session_id
 }: {
-  sessionId: string | undefined;
+  session_id: string | undefined;
 }): Promise<void> {
-  const db = await getDb({ name: 'app' });
-  const sessionDb = db.collection<InternalSession>('sessions');
+  if (!session_id) {
+    throw new InvalidItemError('session_id', 'parameter');
+  }
 
-  // * At this point, we can finally trust this data is valid and not malicious
+  const sessionDb = await getSessionsDb();
+  const updatedAt = Date.now();
+
   const result = await sessionDb.updateOne(
-    { _id: itemToObjectId(String(sessionId)) },
-    { $set: { lastRenewedDate: new Date(Date.now()) } }
+    { _id: itemToObjectId(session_id) },
+    { $set: { lastRenewedDate: new Date(updatedAt), updatedAt } }
   );
 
   if (result.matchedCount !== 1) {
-    throw new ItemNotFoundError(sessionId, 'session');
+    throw new ItemNotFoundError(session_id, 'session');
   }
+}
+
+export async function updateOpportunity({
+  opportunity_id,
+  data
+}: {
+  opportunity_id: string | undefined;
+  data: LiteralUnknownUnion<PatchOpportunity>;
+}): Promise<void> {
+  if (!opportunity_id) {
+    throw new InvalidItemError('opportunity_id', 'parameter');
+  }
+
+  validatePatchOpportunityData(data);
+
+  const opportunitiesDb = await getOpportunitiesDb();
+  const infoDb = await getInfoDb();
+  const { contents, title, views } = data;
+  const shouldIncrementViews = !!views;
+
+  const [result] = await Promise.all([
+    opportunitiesDb.updateOne(
+      { _id: itemToObjectId(opportunity_id) },
+      {
+        $set: {
+          updateAt: Date.now(),
+          ...(contents ? { contents } : {}),
+          ...(title ? { title } : {}),
+          ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
+        }
+      }
+    ),
+    shouldIncrementViews
+      ? infoDb.updateOne({}, { $inc: { views: 1 } })
+      : Promise.resolve()
+  ]);
+
+  assert(
+    result.matchedCount === 1,
+    `expected 1 matched document, ${result.matchedCount} were matched`
+  );
+}
+
+export async function updateArticle({
+  article_id,
+  data
+}: {
+  article_id: string | undefined;
+  data: LiteralUnknownUnion<PatchArticle>;
+}): Promise<void> {
+  if (!article_id) {
+    throw new InvalidItemError('article_id', 'parameter');
+  }
+
+  validatePatchArticleData(data);
+
+  // TODO: also +1 to views if necessary
+  // TODO: keywords need to be deduplicated and lowercased
+
+  const articlesDb = await getArticlesDb();
+  const infoDb = await getInfoDb();
+  const { contents, title, keywords, views } = data;
+  const shouldIncrementViews = !!views;
+
+  const [result] = await Promise.all([
+    articlesDb.updateOne(
+      { _id: itemToObjectId(article_id) },
+      {
+        $set: {
+          updateAt: Date.now(),
+          ...(contents ? { contents } : {}),
+          ...(title ? { title } : {}),
+          ...(keywords
+            ? { keywords: Array.from(new Set(keywords.map((s) => s.toLowerCase()))) }
+            : {}),
+          ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
+        }
+      }
+    ),
+    shouldIncrementViews
+      ? infoDb.updateOne({}, { $inc: { views: 1 } })
+      : Promise.resolve()
+  ]);
+
+  assert(
+    result.matchedCount === 1,
+    `expected 1 matched document, ${result.matchedCount} were matched`
+  );
 }
 
 export async function deleteUser({
-  usernameOrEmail
+  user_id
 }: {
-  usernameOrEmail: Username | Email | undefined;
+  user_id: string | undefined;
 }): Promise<void> {
-  const { _id: user_id, type } = await usernameOrEmailParamToUser(usernameOrEmail);
-
-  const db = await getDb({ name: 'app' });
-  const usersDb = db.collection<InternalUser>('users');
-  const pagesDb = db.collection<InternalPage>('pages');
-  const infoDb = db.collection<InternalInfo>('info');
-
-  const [deleteUserResult, deletePagesResult] = await Promise.all([
-    usersDb.deleteOne({ _id: user_id }),
-    pagesDb.deleteMany({ blog_id: user_id }),
-    infoDb.updateOne({}, { $inc: { users: -1 } })
-  ]);
-
-  if (type === 'blogger') {
-    await infoDb.updateOne(
-      {},
-      { $inc: { blogs: -1, pages: -1 * deletePagesResult.deletedCount } }
-    );
+  if (!user_id) {
+    throw new InvalidItemError('user_id', 'parameter');
   }
-  // ? We already do the existence check when we get the user_id. This is just a
-  // ? sanity check at this point.
-  assert(
-    deleteUserResult.deletedCount === 1,
-    `expected 1 affected document, ${deleteUserResult.deletedCount} were affected`
-  );
-}
 
-export async function deletePage({
-  blogName,
-  pageName
-}: {
-  blogName: string | undefined;
-  pageName: string | undefined;
-}): Promise<void> {
-  const { _id: blog_id } = await blogNameToUser(blogName);
-  const { _id: page_id } = await pageNameToPage(pageName, blog_id);
-
-  const db = await getDb({ name: 'app' });
-  const pagesDb = db.collection<InternalPage>('pages');
-  const infoDb = db.collection<InternalInfo>('info');
-
-  const [deletePagesResult] = await Promise.all([
-    pagesDb.deleteOne({ _id: page_id }),
-    infoDb.updateOne({}, { $inc: { pages: -1 } })
+  const userId = itemToObjectId(user_id);
+  const [usersDb, articlesDb, infoDb] = await Promise.all([
+    getUsersDb(),
+    getArticlesDb(),
+    getInfoDb()
   ]);
 
-  // ? We already do the existence check when we get the page_id. This is just a
-  // ? sanity check at this point.
-  assert(
-    deletePagesResult.deletedCount === 1,
-    `expected 1 affected document, ${deletePagesResult.deletedCount} were affected`
-  );
+  // TODO: this (and code like it elsewhere) should be within a transaction
+  const [deleteUsersCount] = await Promise.all([
+    usersDb.deleteOne({ _id: userId }).then(async ({ deletedCount }) => {
+      await infoDb.updateOne({}, { $inc: { users: -1 } });
+      return deletedCount;
+    }),
+    articlesDb.deleteMany({ creator_id: userId }).then(({ deletedCount }) => {
+      if (deletedCount) {
+        return infoDb.updateOne({}, { $inc: { articles: -1 * deletedCount } });
+      }
+    })
+  ]);
+
+  if (deleteUsersCount !== 1) {
+    throw new ItemNotFoundError(user_id, 'user');
+  }
 }
 
 export async function deleteSession({
-  sessionId
+  session_id
 }: {
-  sessionId: string | undefined;
+  session_id: string | undefined;
 }): Promise<void> {
-  const db = await getDb({ name: 'app' });
-  const sessionDb = db.collection<InternalSession>('sessions');
-  const result = await sessionDb.deleteOne({
-    _id: itemToObjectId(String(sessionId))
+  if (!session_id) {
+    throw new InvalidItemError('session_id', 'parameter');
+  }
+
+  const sessionDb = await getSessionsDb();
+  const { deletedCount } = await sessionDb.deleteOne({
+    _id: itemToObjectId(session_id)
   });
 
-  if (result.deletedCount !== 1) {
-    throw new ItemNotFoundError(sessionId, 'session');
+  if (deletedCount !== 1) {
+    throw new ItemNotFoundError(session_id, 'session');
+  }
+}
+
+export async function deleteOpportunity({
+  opportunity_id
+}: {
+  opportunity_id: string | undefined;
+}): Promise<void> {
+  if (!opportunity_id) {
+    throw new InvalidItemError('opportunity_id', 'parameter');
+  }
+
+  const opportunitiesDb = await getOpportunitiesDb();
+  const infoDb = await getInfoDb();
+
+  // TODO: this (and code like it elsewhere) should be within a transaction
+  const deletedCount = await opportunitiesDb
+    .deleteOne({ _id: itemToObjectId(opportunity_id) })
+    .then(async ({ deletedCount }) => {
+      await infoDb.updateOne({}, { $inc: { opportunities: -1 } });
+      return deletedCount;
+    });
+
+  if (deletedCount !== 1) {
+    throw new ItemNotFoundError(opportunity_id, 'opportunity');
+  }
+}
+
+export async function deleteArticle({
+  article_id
+}: {
+  article_id: string | undefined;
+}): Promise<void> {
+  if (!article_id) {
+    throw new InvalidItemError('article_id', 'parameter');
+  }
+
+  const articlesDb = await getArticlesDb();
+  const infoDb = await getInfoDb();
+
+  // TODO: this (and code like it elsewhere) should be within a transaction
+  const deletedCount = await articlesDb
+    .deleteOne({ _id: itemToObjectId(article_id) })
+    .then(async ({ deletedCount }) => {
+      await infoDb.updateOne({}, { $inc: { articles: -1 } });
+      return deletedCount;
+    });
+
+  if (deletedCount !== 1) {
+    throw new ItemNotFoundError(article_id, 'article');
+  }
+}
+
+export async function deleteUserConnection({
+  user_id,
+  connection_id
+}: {
+  user_id: string | undefined;
+  connection_id: string | undefined;
+}): Promise<void> {
+  if (!user_id) {
+    throw new InvalidItemError('user_id', 'parameter');
+  }
+
+  if (!connection_id) {
+    throw new InvalidItemError('connection_id', 'parameter');
+  }
+
+  const now = Date.now();
+  const userId = itemToObjectId(user_id);
+  const connectionId = itemToObjectId(connection_id);
+  const usersDb = await getUsersDb();
+
+  // TODO: all of this together is probably better in a transaction
+  const [userIdResult] = await Promise.all([
+    usersDb.updateOne(
+      { _id: userId },
+      { $pull: { connections: connectionId }, $set: { updatedAt: now } }
+    ),
+    usersDb.updateOne(
+      { _id: connectionId },
+      { $pull: { connections: userId }, $set: { updatedAt: now } }
+    )
+  ]);
+
+  if (userIdResult.matchedCount !== 1) {
+    throw new ItemNotFoundError(user_id, 'user');
+  }
+
+  if (userIdResult.modifiedCount !== 1) {
+    throw new ValidationError(ErrorMessage.NotConnected());
   }
 }
 
 export async function authAppUser({
-  usernameOrEmail,
+  user_id,
   key
 }: {
-  usernameOrEmail: Username | Email | undefined;
+  user_id: string | undefined;
   key: string | undefined;
 }): Promise<boolean> {
-  if (!key || !usernameOrEmail) return false;
+  if (!user_id) {
+    throw new InvalidItemError('user_id', 'parameter');
+  }
 
-  const db = await getDb({ name: 'app' });
-  const usersDb = db.collection<InternalUser>('users');
+  if (!key) {
+    throw new InvalidItemError('key', 'parameter');
+  }
 
-  return !!(await usersDb.countDocuments({
-    $or: [{ username: usernameOrEmail }, { email: usernameOrEmail }],
-    key
-  }));
+  const usersDb = await getUsersDb();
+  return !!(await usersDb.countDocuments({ _id: itemToObjectId(user_id), key }));
 }

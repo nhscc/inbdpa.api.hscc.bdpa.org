@@ -1,32 +1,24 @@
+/* eslint-disable unicorn/filename-case */
 import { withMiddleware } from 'universe/backend/middleware';
-import { getBlog, updateBlog } from 'universe/backend';
 import { sendHttpOk } from 'multiverse/next-api-respond';
+
+import { getSessionsCountFor } from 'universe/backend';
 
 // ? This is a NextJS special "config" export
 export { defaultConfig as config } from 'universe/backend/api';
 
 export const metadata = {
-  descriptor: '/blogs/:blogName'
+  descriptor: '/sessions/count-for/user/:user_id'
 };
 
 export default withMiddleware(
   async (req, res) => {
-    const blogName = req.query.blogName?.toString();
+    const user_id = req.query.user_id?.toString();
 
     switch (req.method) {
       case 'GET': {
         sendHttpOk(res, {
-          blog: await getBlog({ blogName })
-        });
-        break;
-      }
-
-      case 'PATCH': {
-        sendHttpOk(res, {
-          page: await updateBlog({
-            blogName,
-            data: req.body
-          })
+          active: await getSessionsCountFor('profile', { viewed_id: user_id })
         });
         break;
       }
@@ -34,6 +26,6 @@ export default withMiddleware(
   },
   {
     descriptor: metadata.descriptor,
-    options: { allowedMethods: ['GET', 'PATCH'], apiVersion: '1' }
+    options: { allowedMethods: ['GET'], apiVersion: '1' }
   }
 );

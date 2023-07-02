@@ -1,5 +1,5 @@
 import { withMiddleware } from 'universe/backend/middleware';
-import { createPage, getBlogPagesMetadata } from 'universe/backend';
+import { getAllArticles, createArticle } from 'universe/backend';
 import { authorizationHeaderToOwnerAttribute } from 'universe/backend/api';
 import { sendHttpOk } from 'multiverse/next-api-respond';
 
@@ -7,25 +7,25 @@ import { sendHttpOk } from 'multiverse/next-api-respond';
 export { defaultConfig as config } from 'universe/backend/api';
 
 export const metadata = {
-  descriptor: '/blogs/:blogName/pages'
+  descriptor: '/articles'
 };
 
 export default withMiddleware(
   async (req, res) => {
-    const blogName = req.query.blogName?.toString();
-
     switch (req.method) {
       case 'GET': {
         sendHttpOk(res, {
-          pages: await getBlogPagesMetadata({ blogName })
+          articles: await getAllArticles({
+            after_id: req.query.after?.toString(),
+            updatedAfter: req.query.updatedAfter?.toString()
+          })
         });
         break;
       }
 
       case 'POST': {
         sendHttpOk(res, {
-          page: await createPage({
-            blogName,
+          article: await createArticle({
             data: req.body,
             __provenance: await authorizationHeaderToOwnerAttribute(
               req.headers.authorization
@@ -38,6 +38,6 @@ export default withMiddleware(
   },
   {
     descriptor: metadata.descriptor,
-    options: { allowedMethods: ['GET', 'POST'], apiVersion: '1' }
+    options: { allowedMethods: ['GET', 'POST'], apiVersion: '2' }
   }
 );

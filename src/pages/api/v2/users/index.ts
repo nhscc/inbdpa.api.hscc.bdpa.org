@@ -18,7 +18,7 @@ export default withMiddleware(
           users: await getAllUsers({
             after_id: req.query.after?.toString(),
             updatedAfter: req.query.updatedAfter?.toString(),
-            includeSessionCount: false
+            includeSessionCount: true
           })
         });
         break;
@@ -39,6 +39,6 @@ export default withMiddleware(
   },
   {
     descriptor: metadata.descriptor,
-    options: { allowedMethods: ['GET', 'POST'], apiVersion: '1' }
+    options: { allowedMethods: ['GET', 'POST'], apiVersion: '2' }
   }
 );

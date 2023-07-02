@@ -9,7 +9,7 @@ export async function getServerSideProps() {
 
   return {
     props: {
-      isInProduction: env.NODE_ENV == 'production',
+      isInProduction: env.NODE_ENV === 'production',
       nodeEnv: env.NODE_ENV,
       nodeVersion: process.version
     }

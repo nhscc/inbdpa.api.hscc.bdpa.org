@@ -21,6 +21,15 @@ export function getEnv<T extends Environment = Environment>() {
     USER_SALT_LENGTH: Number(process.env.USER_SALT_LENGTH) || 32,
     USER_KEY_LENGTH: Number(process.env.USER_KEY_LENGTH) || 128,
 
+    MAX_USER_FULLNAME_LENGTH: Number(process.env.MAX_USER_FULLNAME_LENGTH) || 30,
+    MAX_USER_ABOUT_SECTION_LENGTH_BYTES:
+      parseAsBytes(process.env.MAX_USER_ABOUT_SECTION_LENGTH_BYTES ?? '-Infinity') ||
+      1024,
+    MAX_USER_ABOUT_SECTION_SKILLS:
+      Number(process.env.MAX_USER_ABOUT_SECTION_SKILLS) || 10,
+    MAX_USER_ABOUT_SECTION_SKILL_LENGTH:
+      Number(process.env.MAX_USER_ABOUT_SECTION_SKILL_LENGTH) || 30,
+    MAX_USER_SECTION_ITEMS: Number(process.env.MAX_USER_SECTION_ITEMS) || 10,
     MAX_SECTION_TITLE_LENGTH: Number(process.env.MAX_SECTION_TITLE_LENGTH) || 100,
     MAX_SECTION_LOCATION_LENGTH:
       Number(process.env.MAX_SECTION_LOCATION_LENGTH) || 100,
@@ -32,9 +41,9 @@ export function getEnv<T extends Environment = Environment>() {
       parseAsBytes(
         process.env.MAX_OPPORTUNITY_CONTENTS_LENGTH_BYTES ?? '-Infinity'
       ) || 3072,
-    MAX_ABOUT_SECTION_LENGTH_BYTES:
-      parseAsBytes(process.env.MAX_ABOUT_SECTION_LENGTH_BYTES ?? '-Infinity') || 1024,
-    MAX_USER_SECTION_ITEMS: Number(process.env.MAX_USER_SECTION_ITEMS) || 10,
+    MAX_ARTICLE_TITLE_LENGTH: Number(process.env.MAX_ARTICLE_TITLE_LENGTH) || 100,
+    MAX_ARTICLE_CONTENTS_LENGTH_BYTES:
+      Number(process.env.MAX_ARTICLE_CONTENTS_LENGTH_BYTES) || 3072,
     MAX_ARTICLE_KEYWORDS: Number(process.env.MAX_ARTICLE_KEYWORDS) || 10,
     MAX_ARTICLE_KEYWORD_LENGTH: Number(process.env.MAX_ARTICLE_KEYWORD_LENGTH) || 20,
     SESSION_EXPIRE_AFTER_SECONDS:
@@ -56,8 +65,8 @@ export function getEnv<T extends Environment = Environment>() {
   // TODO: unless OVERRIDE_EXPECT_ENV is properly defined.
   /* istanbul ignore next */
   if (
-    (env.NODE_ENV != 'test' && env.OVERRIDE_EXPECT_ENV != 'force-no-check') ||
-    env.OVERRIDE_EXPECT_ENV == 'force-check'
+    (env.NODE_ENV !== 'test' && env.OVERRIDE_EXPECT_ENV !== 'force-no-check') ||
+    env.OVERRIDE_EXPECT_ENV === 'force-check'
   ) {
     const errors: string[] = [];
 
@@ -76,7 +85,7 @@ export function getEnv<T extends Environment = Environment>() {
         'MAX_SECTION_DESCRIPTION_LENGTH',
         'MAX_OPPORTUNITY_TITLE_LENGTH',
         'MAX_OPPORTUNITY_CONTENTS_LENGTH_BYTES',
-        'MAX_ABOUT_SECTION_LENGTH_BYTES',
+        'MAX_USER_ABOUT_SECTION_LENGTH_BYTES',
         'MAX_USER_SECTION_ITEMS',
         'SESSION_EXPIRE_AFTER_SECONDS'
       ] as (keyof typeof env)[]

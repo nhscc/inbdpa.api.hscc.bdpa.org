@@ -1,5 +1,5 @@
 import { withMiddleware } from 'universe/backend/middleware';
-import { createUser, getAllUsers } from 'universe/backend';
+import { getAllOpportunities, createOpportunity } from 'universe/backend';
 import { authorizationHeaderToOwnerAttribute } from 'universe/backend/api';
 import { sendHttpOk } from 'multiverse/next-api-respond';
 
@@ -7,7 +7,7 @@ import { sendHttpOk } from 'multiverse/next-api-respond';
 export { defaultConfig as config } from 'universe/backend/api';
 
 export const metadata = {
-  descriptor: '/users'
+  descriptor: '/opportunities'
 };
 
 export default withMiddleware(
@@ -15,10 +15,10 @@ export default withMiddleware(
     switch (req.method) {
       case 'GET': {
         sendHttpOk(res, {
-          users: await getAllUsers({
+          opportunities: await getAllOpportunities({
             after_id: req.query.after?.toString(),
             updatedAfter: req.query.updatedAfter?.toString(),
-            includeSessionCount: false
+            includeSessionCount: true
           })
         });
         break;
@@ -26,7 +26,7 @@ export default withMiddleware(
 
       case 'POST': {
         sendHttpOk(res, {
-          user: await createUser({
+          opportunity: await createOpportunity({
             data: req.body,
             __provenance: await authorizationHeaderToOwnerAttribute(
               req.headers.authorization
@@ -39,6 +39,6 @@ export default withMiddleware(
   },
   {
     descriptor: metadata.descriptor,
-    options: { allowedMethods: ['GET', 'POST'], apiVersion: '1' }
+    options: { allowedMethods: ['GET', 'POST'], apiVersion: '2' }
   }
 );

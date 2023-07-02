@@ -23,10 +23,13 @@ export const ErrorMessage = {
     }${validValues ? `. Valid values: ${validValues.join(', ')}` : ''}`,
   InvalidArrayValue: (
     property: string,
-    value: string,
+    value?: string,
+    index?: number,
     validValues?: readonly string[]
   ) =>
-    `the \`${property}\` array element "${value}" is invalid or illegal${
+    `the \`${property}\` array element ${value !== undefined ? ` "${value}"` : ''}${
+      index !== undefined ? ` at index ${index}` : ''
+    } is invalid or illegal${
       validValues ? `. Valid values: ${validValues.join(', ')}` : ''
     }`,
   InvalidObjectKeyValue: (
@@ -51,7 +54,7 @@ export const ErrorMessage = {
     isArray = false
   ) =>
     `${isArray ? `each \`${property}\` element` : `\`${property}\``} must be a${
-      type == 'integer' ? 'n integer' : ' number'
+      type === 'integer' ? 'n integer' : ' number'
     } ${max ? `between ${min} and ${max} (inclusive)` : `>= ${min}`}${
       nullable ? ' or null' : ''
     }`,
@@ -64,19 +67,19 @@ export const ErrorMessage = {
     isArray = false
   ) =>
     `${isArray ? `each \`${property}\` element` : `\`${property}\``} must be a${
-      syntax == 'alphanumeric'
+      syntax === 'alphanumeric'
         ? 'n alphanumeric'
-        : syntax != 'bytes'
+        : syntax !== 'bytes'
         ? ` ${syntax}`
         : ''
     } ${
       max
         ? `string between ${min} and ${max} ${
-            syntax == 'bytes' ? 'byte' : 'character'
+            syntax === 'bytes' ? 'byte' : 'character'
           }s (inclusive)`
-        : `${min} ${syntax == 'bytes' ? 'byte' : 'character'} string`
+        : `${min} ${syntax === 'bytes' ? 'byte' : 'character'} string`
     }${nullable ? ' or null' : ''}`,
-  InvalidObjectId: (id: string) => `invalid id "${id}"`,
+  InvalidObjectId: (id: string) => `invalid ObjectId "${id}"`,
   UnknownField: (property: string) =>
     `encountered unknown or illegal field \`${property}\``,
   UnknownSpecifier: (property: string, sub = false) =>
@@ -94,5 +97,8 @@ export const ErrorMessage = {
     return `resource limit reached${resource ? `: ${resource}` : ''}${
       max !== undefined ? ` (exceeded maximum of ${max})` : ''
     }`;
-  }
+  },
+  IllegalCyclicalConnection: () => 'cannot create a cyclical connection',
+  DuplicateConnection: () => 'a connection between these users already exists',
+  NotConnected: () => 'no connection exists between these users'
 };

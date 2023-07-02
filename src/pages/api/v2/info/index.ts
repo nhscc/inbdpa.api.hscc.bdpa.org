@@ -13,13 +13,13 @@ export default withMiddleware(
   async (req, res) => {
     switch (req.method) {
       case 'GET': {
-        sendHttpOk(res, { info: await getInfo({ includeArticleCount: false }) });
+        sendHttpOk(res, { info: await getInfo({ includeArticleCount: true }) });
         break;
       }
     }
   },
   {
     descriptor: metadata.descriptor,
-    options: { allowedMethods: ['GET'], apiVersion: '1' }
+    options: { allowedMethods: ['GET'], apiVersion: '2' }
   }
 );

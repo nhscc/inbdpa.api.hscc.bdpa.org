@@ -1,32 +1,33 @@
+/* eslint-disable unicorn/filename-case */
 import { withMiddleware } from 'universe/backend/middleware';
-import { getUser, updateUser, deleteUser } from 'universe/backend';
+import { getSession, renewSession, deleteSession } from 'universe/backend';
 import { sendHttpOk } from 'multiverse/next-api-respond';
 
 // ? This is a NextJS special "config" export
 export { defaultConfig as config } from 'universe/backend/api';
 
 export const metadata = {
-  descriptor: '/users/:usernameOrEmail'
+  descriptor: '/sessions/:session_id'
 };
 
 export default withMiddleware(
   async (req, res) => {
-    const usernameOrEmail = req.query.usernameOrEmail?.toString();
+    const session_id = req.query.session_id?.toString();
 
     switch (req.method) {
       case 'GET': {
-        sendHttpOk(res, { user: await getUser({ usernameOrEmail }) });
+        sendHttpOk(res, { session: await getSession({ session_id }) });
         break;
       }
 
       case 'PATCH': {
-        await updateUser({ usernameOrEmail, data: req.body });
+        await renewSession({ session_id });
         sendHttpOk(res);
         break;
       }
 
       case 'DELETE': {
-        await deleteUser({ usernameOrEmail });
+        await deleteSession({ session_id });
         sendHttpOk(res);
         break;
       }
@@ -34,6 +35,6 @@ export default withMiddleware(
   },
   {
     descriptor: metadata.descriptor,
-    options: { allowedMethods: ['GET', 'PATCH', 'DELETE'], apiVersion: '1' }
+    options: { allowedMethods: ['GET', 'PATCH', 'DELETE'], apiVersion: '2' }
   }
 );

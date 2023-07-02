@@ -6,7 +6,7 @@ import { sendHttpOk, sendHttpUnauthorized } from 'multiverse/next-api-respond';
 export { defaultConfig as config } from 'universe/backend/api';
 
 export const metadata = {
-  descriptor: '/users/:usernameOrEmail/auth'
+  descriptor: '/users/:user_id/auth'
 };
 
 export default withMiddleware(
@@ -14,7 +14,7 @@ export default withMiddleware(
     switch (req.method) {
       case 'POST': {
         const authSucceeded = await authAppUser({
-          usernameOrEmail: req.query.usernameOrEmail?.toString(),
+          user_id: req.query.usernameOrId?.toString(),
           key: req.body?.key
         });
 

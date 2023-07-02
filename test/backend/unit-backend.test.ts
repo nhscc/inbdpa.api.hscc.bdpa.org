@@ -9,7 +9,6 @@ import { ErrorMessage } from 'universe/error';
 
 import {
   type InternalUser,
-  type InternalPage,
   type InternalSession,
   type NewUser,
   type NewPage,

@@ -8,15 +8,15 @@ import {
 } from 'named-app-errors';
 
 import { debugNamespace as namespace } from 'universe/constants';
+import { deleteArticle, deleteOpportunity, deleteUser } from 'universe/backend';
 import { getEnv } from 'universe/backend/env';
-import { deletePage, deleteUser } from 'universe/backend';
+import { getArticlesDb, getOpportunitiesDb, getUsersDb } from 'universe/backend/db';
 
 import { debugFactory } from 'multiverse/debug-extended';
 import { getDb } from 'multiverse/mongo-schema';
 
 import type { Document, ObjectId, WithId } from 'mongodb';
 import type { Promisable } from 'type-fest';
-import type { InternalInfo, InternalPage, InternalUser } from 'universe/backend/db';
 
 const debugNamespace = `${namespace}:prune-data`;
 
@@ -69,54 +69,65 @@ const getDbCollectionLimits = (env: ReturnType<typeof getEnv>) => {
       }
     },
     app: {
-      pages: {
+      articles: {
         limit: {
           maxBytes:
-            env.PRUNE_DATA_MAX_PAGES_BYTES && env.PRUNE_DATA_MAX_PAGES_BYTES > 0
-              ? env.PRUNE_DATA_MAX_PAGES_BYTES
+            env.PRUNE_DATA_MAX_ARTICLES_BYTES && env.PRUNE_DATA_MAX_ARTICLES_BYTES > 0
+              ? env.PRUNE_DATA_MAX_ARTICLES_BYTES
               : toss(
                   new InvalidAppEnvironmentError(
-                    'PRUNE_DATA_MAX_PAGES_BYTES must be greater than zero'
+                    'PRUNE_DATA_MAX_ARTICLES_BYTES must be greater than zero'
                   )
                 )
         },
         async deleteFn(thresholdEntry) {
-          const db = await getDb({ name: 'app' });
-          const usersDb = db.collection<InternalUser>('users');
-          const pagesDb = db.collection<InternalPage>('pages');
-          const infoDb = db.collection<InternalInfo>('pages');
+          const articlesDb = await getArticlesDb();
 
-          const pages = await pagesDb
-            .find(
-              { _id: { $lte: thresholdEntry._id } },
-              { projection: { _id: true, blog_id: true, name: true } }
-            )
-            .toArray();
+          const ids = (
+            await articlesDb
+              .find(
+                { _id: { $lte: thresholdEntry._id } },
+                { projection: { _id: true } }
+              )
+              .toArray()
+          ).map((entry) => entry._id);
 
           await Promise.all(
-            pages.map(async ({ _id: page_id, blog_id, name: pageName }) => {
-              const { blogName } =
-                (await usersDb.findOne(
-                  { _id: blog_id },
-                  { projection: { _id: false, blogName: true } }
-                )) || {};
-
-              if (!blogName) {
-                debug.warn(
-                  `database contained orphaned page that had to be deleted manually: ${page_id}`
-                );
-
-                await Promise.all([
-                  pagesDb.deleteOne({ _id: page_id }),
-                  infoDb.updateOne({}, { $inc: { pages: -1 } })
-                ]);
-              } else {
-                await deletePage({ blogName, pageName });
-              }
-            })
+            ids.map((id) => deleteArticle({ article_id: id.toString() }))
           );
 
-          return pages.length;
+          return ids.length;
+        }
+      },
+      opportunities: {
+        limit: {
+          maxBytes:
+            env.PRUNE_DATA_MAX_OPPORTUNITIES_BYTES &&
+            env.PRUNE_DATA_MAX_OPPORTUNITIES_BYTES > 0
+              ? env.PRUNE_DATA_MAX_OPPORTUNITIES_BYTES
+              : toss(
+                  new InvalidAppEnvironmentError(
+                    'PRUNE_DATA_MAX_OPPORTUNITIES_BYTES must be greater than zero'
+                  )
+                )
+        },
+        async deleteFn(thresholdEntry) {
+          const opportunitiesDb = await getOpportunitiesDb();
+
+          const ids = (
+            await opportunitiesDb
+              .find(
+                { _id: { $lte: thresholdEntry._id } },
+                { projection: { _id: true } }
+              )
+              .toArray()
+          ).map((entry) => entry._id);
+
+          await Promise.all(
+            ids.map((id) => deleteOpportunity({ opportunity_id: id.toString() }))
+          );
+
+          return ids.length;
         }
       },
       sessions: {
@@ -143,23 +154,19 @@ const getDbCollectionLimits = (env: ReturnType<typeof getEnv>) => {
                 )
         },
         async deleteFn(thresholdEntry) {
-          const users = (await getDb({ name: 'app' })).collection<InternalUser>(
-            'users'
-          );
+          const users = await getUsersDb();
 
-          const emails = (
+          const ids = (
             await users
               .find(
                 { _id: { $lte: thresholdEntry._id } },
-                { projection: { _id: false, email: true } }
+                { projection: { _id: true } }
               )
               .toArray()
-          ).map((user) => user.email);
+          ).map((entry) => entry._id);
 
-          await Promise.all(
-            emails.map((email) => deleteUser({ usernameOrEmail: email }))
-          );
-          return emails.length;
+          await Promise.all(ids.map((id) => deleteUser({ user_id: id.toString() })));
+          return ids.length;
         }
       }
     }

@@ -641,6 +641,10 @@ export async function createOpportunity({
   const infoDb = await getInfoDb();
   const { contents, creator_id, title } = data;
 
+  if (!(await itemExists(await getUsersDb(), creator_id))) {
+    throw new ItemNotFoundError(creator_id, 'user');
+  }
+
   const newOpportunity: InternalOpportunity = {
     _id: new ObjectId(),
     __provenance,
@@ -678,6 +682,10 @@ export async function createArticle({
   const articlesDb = await getArticlesDb();
   const infoDb = await getInfoDb();
   const { contents, creator_id, keywords, title } = data;
+
+  if (!(await itemExists(await getUsersDb(), creator_id))) {
+    throw new ItemNotFoundError(creator_id, 'user');
+  }
 
   const newArticle: InternalArticle = {
     _id: new ObjectId(),
@@ -744,10 +752,6 @@ export async function createUserConnection({
 
   if (userIdResult.matchedCount !== 1) {
     throw new ItemNotFoundError(user_id, 'user');
-  }
-
-  if (userIdResult.modifiedCount !== 1) {
-    throw new ValidationError(ErrorMessage.DuplicateConnection());
   }
 }
 

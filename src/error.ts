@@ -99,7 +99,5 @@ export const ErrorMessage = {
     }`;
   },
   IllegalCyclicalConnection: () => 'cannot create a cyclical connection',
-  DuplicateConnection: () => 'a connection between these users already exists',
-  NotConnected: () => 'no connection exists between these users',
   InvalidSessionViewCombination: () => 'invalid combination of view and viewed_id'
 };

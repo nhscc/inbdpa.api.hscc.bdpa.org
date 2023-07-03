@@ -560,6 +560,17 @@ function validateGenericArticleData(
     );
   }
 
+  if (
+    (!isPatchData || (isPatchData && data.title !== undefined)) &&
+    (typeof data.title !== 'string' ||
+      data.title.length < 1 ||
+      data.title.length > MAX_ARTICLE_TITLE_LENGTH)
+  ) {
+    throw new ValidationError(
+      ErrorMessage.InvalidStringLength('title', 1, MAX_ARTICLE_TITLE_LENGTH, 'string')
+    );
+  }
+
   if (!isPatchData || (isPatchData && data.keywords !== undefined)) {
     if (!Array.isArray(data.keywords)) {
       throw new ValidationError(ErrorMessage.InvalidFieldValue('keywords'));
@@ -583,17 +594,6 @@ function validateGenericArticleData(
         );
       }
     }
-  }
-
-  if (
-    (!isPatchData || (isPatchData && data.title !== undefined)) &&
-    (typeof data.title !== 'string' ||
-      data.title.length < 1 ||
-      data.title.length > MAX_ARTICLE_TITLE_LENGTH)
-  ) {
-    throw new ValidationError(
-      ErrorMessage.InvalidStringLength('title', 1, MAX_ARTICLE_TITLE_LENGTH, 'string')
-    );
   }
 }
 

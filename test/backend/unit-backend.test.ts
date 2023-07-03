@@ -2969,116 +2969,90 @@ describe('::createSession', () => {
   });
 });
 
-// TODO: createOpportunity/createArticle creator_id needs to be checked for existence
 describe('::createOpportunity', () => {
-  it('creates and returns a new blog page', async () => {
+  it('creates and returns a new V1 opportunity without sessions', async () => {
     expect.hasAssertions();
 
     const __provenance = 'fake-owner';
-    const newPage: NewPage = {
-      name: 'contact',
-      contents: '# Contact us\n\nA contact form goes here!'
+    const newOpportunity: NewOpportunity = {
+      title: 'new opportunity',
+      contents: '',
+      creator_id: itemToStringId(dummyAppData.users[0])
     };
 
     await expect(
-      Backend.createPage({
-        blogName: dummyAppData.users[3].blogName,
-        __provenance,
-        data: newPage
-      })
-    ).resolves.toStrictEqual<PublicPage>({
-      name: newPage.name!,
+      Backend.createOpportunity({ apiVersion: 1, __provenance, data: newOpportunity })
+    ).resolves.toStrictEqual<PublicOpportunity>({
+      ...newOpportunity,
+      opportunity_id: expect.any(String),
+      views: 0,
       createdAt: mockDateNowMs,
-      totalViews: 0,
-      contents: newPage.contents!
+      updatedAt: mockDateNowMs
     });
 
+    // @ts-expect-error: for testing purposes
+    delete newOpportunity.creator_id;
+
     await expect(
-      (await getDb({ name: 'app' }))
-        .collection('pages')
-        .countDocuments({ blog_id: dummyAppData.users[3]._id, ...newPage })
+      (await getOpportunitiesDb()).countDocuments(newOpportunity)
     ).resolves.toBe(1);
   });
 
-  it('allows creation of empty pages', async () => {
+  it('creates and returns a new V2 opportunity with sessions', async () => {
     expect.hasAssertions();
 
-    await expect(
-      Backend.createPage({
-        blogName: dummyAppData.users[3].blogName,
-        __provenance: 'fake-owner',
-        data: {
-          name: 'new-page',
-          contents: ''
-        }
-      })
-    ).resolves.toBeDefined();
+    const __provenance = 'fake-owner';
+    const newOpportunity: NewOpportunity = {
+      title: 'new opportunity',
+      contents: 'stuff',
+      creator_id: itemToStringId(dummyAppData.users[0])
+    };
 
     await expect(
-      (await getDb({ name: 'app' }))
-        .collection('pages')
-        .countDocuments({ __provenance: 'fake-owner' })
-    ).resolves.toBe(1);
-  });
-
-  it('allows creation of pages with duplicate pageName on different blogs', async () => {
-    expect.hasAssertions();
-
-    await expect(
-      Backend.createPage({
-        blogName: dummyAppData.users[3].blogName,
-        __provenance: 'fake-owner',
-        data: {
-          name: dummyAppData.pages[0].name,
-          contents: '# Duplicate page name diff blog'
-        }
-      })
-    ).resolves.toBeDefined();
-
-    await expect(
-      (await getDb({ name: 'app' }))
-        .collection('pages')
-        .countDocuments({ __provenance: 'fake-owner' })
-    ).resolves.toBe(1);
-  });
-
-  it('rejects when attempting to create a page with a duplicate pageName on same blog', async () => {
-    expect.hasAssertions();
-
-    await expect(
-      Backend.createPage({
-        blogName: dummyAppData.users[2].blogName,
-        __provenance: 'fake-owner',
-        data: {
-          name: dummyAppData.pages[0].name,
-          contents: '# Duplicate page name same blog'
-        }
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.DuplicateFieldValue('pageName')
+      Backend.createOpportunity({ apiVersion: 2, __provenance, data: newOpportunity })
+    ).resolves.toStrictEqual<PublicOpportunity>({
+      ...newOpportunity,
+      opportunity_id: expect.any(String),
+      views: 0,
+      sessions: 0,
+      createdAt: mockDateNowMs,
+      updatedAt: mockDateNowMs
     });
+
+    // @ts-expect-error: for testing purposes
+    delete newOpportunity.creator_id;
+
+    await expect(
+      (await getOpportunitiesDb()).countDocuments(newOpportunity)
+    ).resolves.toBe(1);
   });
 
-  it('rejects when creating a page would put user over MAX_USER_BLOG_PAGES', async () => {
+  it('creating an opportunity is reflected in the system info', async () => {
     expect.hasAssertions();
 
-    await withMockedEnv(
-      async () => {
-        await expect(
-          Backend.createPage({
-            blogName: dummyAppData.users[2].blogName,
-            __provenance: 'fake-owner',
-            data: {
-              name: 'new-page',
-              contents: '# A brand new page'
-            }
-          })
-        ).rejects.toMatchObject({
-          message: ErrorMessage.TooMany('pages', getEnv().MAX_USER_BLOG_PAGES)
-        });
-      },
-      { MAX_USER_BLOG_PAGES: '2' },
-      { replace: false }
+    const infoDb = await getInfoDb();
+
+    const __provenance = 'fake-owner';
+    const newOpportunity: NewOpportunity = {
+      title: 'new opportunity',
+      contents: '',
+      creator_id: itemToStringId(dummyAppData.users[0])
+    };
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'opportunities',
+      dummyAppData.opportunities.length
+    );
+
+    await Backend.createOpportunity({
+      apiVersion: 1,
+      __provenance,
+      data: newOpportunity
+    });
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'opportunities',
+      dummyAppData.opportunities.length + 1
     );
   });
 
@@ -3086,111 +3060,619 @@ describe('::createOpportunity', () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.createPage({
-        blogName: dummyAppData.users[2].blogName,
-        __provenance: undefined as unknown as string,
+      Backend.createOpportunity({
+        apiVersion: 1,
         data: {
-          name: 'new-page',
-          contents: '# A brand new page'
-        }
+          title: 'new opportunity',
+          contents: '',
+          creator_id: itemToStringId(dummyAppData.users[0])
+        },
+        __provenance: undefined as unknown as string
       })
     ).rejects.toMatchObject({
       message: expect.stringMatching(/invalid provenance/)
     });
   });
 
-  it('rejects if blogName not found', async () => {
-    expect.hasAssertions();
-
-    await expect(
-      Backend.createPage({
-        blogName: 'does-not-exist',
-        __provenance: 'fake-owner',
-        data: {
-          name: 'new-page',
-          contents: '# A brand new page'
-        }
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound('does-not-exist', 'blog')
-    });
-  });
-
   it('rejects if data is invalid or contains properties that violate limits', async () => {
     expect.hasAssertions();
-    // TODO: rejects on bad/too long/too short name
-    // TODO: rejects on bad/too long/too short contents
+
+    const fake_id = itemToStringId(new ObjectId());
 
     const {
-      MAX_BLOG_PAGE_CONTENTS_LENGTH_BYTES: maxCLength,
-      MAX_BLOG_PAGE_NAME_LENGTH: maxNLength
+      MAX_OPPORTUNITY_CONTENTS_LENGTH_BYTES: maxContentLength,
+      MAX_OPPORTUNITY_TITLE_LENGTH: maxTitleLength
     } = getEnv();
 
-    const newPages: [Parameters<typeof Backend.createPage>[0]['data'], string][] = [
-      [undefined as unknown as NewPage, ErrorMessage.InvalidJSON()],
+    const newOpportunities: [
+      Parameters<typeof Backend.createOpportunity>[0]['data'],
+      string
+    ][] = [
+      [undefined, ErrorMessage.InvalidJSON()],
       ['string data', ErrorMessage.InvalidJSON()],
       [
-        {} as NewPage,
-        ErrorMessage.InvalidStringLength('contents', 0, maxCLength, 'bytes')
+        {} as NewOpportunity,
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
       ],
       [
-        { contents: null as unknown as string },
-        ErrorMessage.InvalidStringLength('contents', 0, maxCLength, 'bytes')
+        { contents: null } as unknown as NewOpportunity,
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
       ],
       [
-        { contents: 5 as unknown as string },
-        ErrorMessage.InvalidStringLength('contents', 0, maxCLength, 'bytes')
+        { contents: false } as unknown as NewOpportunity,
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
       ],
       [
-        { contents: 'x'.repeat(maxCLength + 1) },
-        ErrorMessage.InvalidStringLength('contents', 0, maxCLength, 'bytes')
+        { contents: 'x'.repeat(maxContentLength + 1) } as unknown as NewOpportunity,
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
       ],
       [
-        { contents: '', name: null as unknown as string },
-        ErrorMessage.InvalidStringLength('name', 1, maxNLength, 'alphanumeric')
+        { contents: 'x'.repeat(maxContentLength) } as unknown as NewOpportunity,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
-        { contents: '', name: '' },
-        ErrorMessage.InvalidStringLength('name', 1, maxNLength, 'alphanumeric')
+        { contents: 'x', title: '' } as unknown as NewOpportunity,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
-        { contents: '', name: 'x'.repeat(maxNLength + 1) },
-        ErrorMessage.InvalidStringLength('name', 1, maxNLength, 'alphanumeric')
+        { contents: 'x', title: 5 } as unknown as NewOpportunity,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
-        { contents: '', name: 'not-@lphanumeric' },
-        ErrorMessage.InvalidStringLength('name', 1, maxNLength, 'alphanumeric')
+        { contents: 'x', title: null } as unknown as NewOpportunity,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
-        { contents: '', name: 'not alphanumeric' },
-        ErrorMessage.InvalidStringLength('name', 1, maxNLength, 'alphanumeric')
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength + 1)
+        } as unknown as NewOpportunity,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
-        { contents: '', name: 'name', email: 'x@x.x' } as unknown as NewPage,
-        ErrorMessage.UnknownField('email')
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength)
+        } as unknown as NewOpportunity,
+        ErrorMessage.InvalidFieldValue('creator_id')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: null
+        } as unknown as NewOpportunity,
+        ErrorMessage.InvalidFieldValue('creator_id')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: 5
+        } as unknown as NewOpportunity,
+        ErrorMessage.InvalidFieldValue('creator_id')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: 'bad'
+        } as unknown as NewOpportunity,
+        ErrorMessage.InvalidObjectId('bad')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: fake_id
+        } as unknown as NewOpportunity,
+        ErrorMessage.ItemNotFound(fake_id, 'user')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: itemToStringId(dummyAppData.users[0]),
+          type: 'administrator'
+        } as NewOpportunity,
+        ErrorMessage.UnknownField('type')
       ]
     ];
 
-    await expectExceptionsWithMatchingErrors(newPages, (data) =>
-      Backend.createPage({
-        data,
-        __provenance: 'fake-owner',
-        blogName: dummyAppData.users[2].blogName
-      })
+    await expectExceptionsWithMatchingErrors(newOpportunities, (data) =>
+      Backend.createOpportunity({ apiVersion: 1, data, __provenance: 'fake-owner' })
+    );
+
+    await expectExceptionsWithMatchingErrors(newOpportunities, (data) =>
+      Backend.createOpportunity({ apiVersion: 2, data, __provenance: 'fake-owner' })
     );
   });
 });
 
 describe('::createArticle', () => {
-  it('todo', () => {
+  it('creates and returns a new article with sessions', async () => {
     expect.hasAssertions();
+
+    const __provenance = 'fake-owner';
+    const newArticle: NewArticle = {
+      title: 'new article',
+      contents: '',
+      creator_id: itemToStringId(dummyAppData.users[0]),
+      keywords: []
+    };
+
+    await expect(
+      Backend.createArticle({ __provenance, data: newArticle })
+    ).resolves.toStrictEqual<PublicArticle>({
+      ...newArticle,
+      article_id: expect.any(String),
+      views: 0,
+      sessions: 0,
+      createdAt: mockDateNowMs,
+      updatedAt: mockDateNowMs
+    });
+
+    // @ts-expect-error: for testing purposes
+    delete newArticle.creator_id;
+
+    await expect((await getArticlesDb()).countDocuments(newArticle)).resolves.toBe(1);
+  });
+
+  it('lowercases and de-duplicates keywords', async () => {
+    expect.hasAssertions();
+
+    const __provenance = 'fake-owner';
+    const newArticle: NewArticle = {
+      title: 'new article',
+      contents: '',
+      creator_id: itemToStringId(dummyAppData.users[0]),
+      keywords: ['one', 'ONE', 'One', 'OnE', '1', '1', '1', 'sAmEneSs']
+    };
+
+    await expect(
+      Backend.createArticle({ __provenance, data: newArticle })
+    ).resolves.toStrictEqual<PublicArticle>(
+      expect.objectContaining({
+        keywords: ['one', '1', 'sameness']
+      })
+    );
+  });
+
+  it('creating an article is reflected in the system info', async () => {
+    expect.hasAssertions();
+
+    const infoDb = await getInfoDb();
+
+    const __provenance = 'fake-owner';
+    const newArticle: NewArticle = {
+      title: 'new article',
+      contents: '',
+      creator_id: itemToStringId(dummyAppData.users[0]),
+      keywords: []
+    };
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'articles',
+      dummyAppData.articles.length
+    );
+
+    await Backend.createArticle({ __provenance, data: newArticle });
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'articles',
+      dummyAppData.articles.length + 1
+    );
+  });
+
+  it('rejects if __provenance is not a string', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.createArticle({
+        data: {
+          title: 'new article',
+          contents: '',
+          keywords: [],
+          creator_id: itemToStringId(dummyAppData.users[0])
+        },
+        __provenance: undefined as unknown as string
+      })
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/invalid provenance/)
+    });
+  });
+
+  it('rejects if data is invalid or contains properties that violate limits', async () => {
+    expect.hasAssertions();
+
+    const fake_id = itemToStringId(new ObjectId());
+
+    const {
+      MAX_ARTICLE_CONTENTS_LENGTH_BYTES: maxContentLength,
+      MAX_ARTICLE_TITLE_LENGTH: maxTitleLength,
+      MAX_ARTICLE_KEYWORDS: maxKeywords,
+      MAX_ARTICLE_KEYWORD_LENGTH: maxKeywordLength
+    } = getEnv();
+
+    const newArticles: [
+      Parameters<typeof Backend.createArticle>[0]['data'],
+      string
+    ][] = [
+      [undefined, ErrorMessage.InvalidJSON()],
+      ['string data', ErrorMessage.InvalidJSON()],
+      [
+        {} as NewArticle,
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { contents: null } as unknown as NewArticle,
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { contents: false } as unknown as NewArticle,
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { contents: 'x'.repeat(maxContentLength + 1) } as unknown as NewArticle,
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { contents: 'x'.repeat(maxContentLength) } as unknown as NewArticle,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        { contents: 'x', title: '' } as unknown as NewArticle,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        { contents: 'x', title: 5 } as unknown as NewArticle,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        { contents: 'x', title: null } as unknown as NewArticle,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength + 1)
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength)
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidFieldValue('keywords')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          keywords: null
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidFieldValue('keywords')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          keywords: 5
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidFieldValue('keywords')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          keywords: Array.from({ length: maxKeywords + 1 }).map((_, index) =>
+            index.toString()
+          )
+        } as unknown as NewArticle,
+        ErrorMessage.TooMany('keywords', maxKeywords)
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          keywords: Array.from({ length: maxKeywords }).map((_, index) =>
+            index.toString().repeat(maxKeywordLength + 1)
+          )
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidArrayValue(
+          'keywords',
+          '0'.repeat(maxKeywordLength + 1),
+          0
+        )
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          keywords: ['ok', 'ok', 5]
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidArrayValue('keywords', '5', 2)
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          keywords: ['ok', null, 'ok']
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidArrayValue('keywords', 'null', 1)
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          keywords: ['ok', '', 'ok']
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidArrayValue('keywords', '', 1)
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          keywords: ['not alphanumeric']
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidArrayValue('keywords', 'not alphanumeric', 0)
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          keywords: []
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidFieldValue('creator_id')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: null,
+          keywords: []
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidFieldValue('creator_id')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: 5,
+          keywords: []
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidFieldValue('creator_id')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: 'bad',
+          keywords: []
+        } as unknown as NewArticle,
+        ErrorMessage.InvalidObjectId('bad')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: fake_id,
+          keywords: []
+        } as unknown as NewArticle,
+        ErrorMessage.ItemNotFound(fake_id, 'user')
+      ],
+      [
+        {
+          contents: 'x',
+          title: 'x'.repeat(maxTitleLength),
+          creator_id: itemToStringId(dummyAppData.users[0]),
+          type: 'administrator',
+          keywords: []
+        } as NewArticle,
+        ErrorMessage.UnknownField('type')
+      ]
+    ];
+
+    await expectExceptionsWithMatchingErrors(newArticles, (data) =>
+      Backend.createArticle({ data, __provenance: 'fake-owner' })
+    );
   });
 });
 
-// TODO: also updates updatedAt
 describe('::createUserConnection', () => {
-  it('todo', () => {
+  it('creates a connection between two users', async () => {
     expect.hasAssertions();
+
+    const usersDb = await getUsersDb();
+    const userZeroId = itemToObjectId(dummyAppData.users[0]);
+    const userOneId = itemToObjectId(dummyAppData.users[1]);
+
+    const { connections: connections1 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { connections: connections2 } =
+      (await usersDb.findOne({ _id: userOneId })) || toss(new TrialError());
+
+    expect(connections1.some((id) => id.equals(userOneId))).toBeFalse();
+    expect(connections2.some((id) => id.equals(userZeroId))).toBeFalse();
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: itemToStringId(userZeroId),
+        connection_id: itemToStringId(userOneId)
+      })
+    ).resolves.toBeUndefined();
+
+    const { connections: connections3 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { connections: connections4 } =
+      (await usersDb.findOne({ _id: userOneId })) || toss(new TrialError());
+
+    expect(connections3.some((id) => id.equals(userOneId))).toBeTrue();
+    expect(connections4.some((id) => id.equals(userZeroId))).toBeTrue();
+  });
+
+  it("updates both users' updateAt property", async () => {
+    expect.hasAssertions();
+
+    const expectedUpdatedAt = mockDateNowMs + 10 ** 5;
+
+    jest.spyOn(Date, 'now').mockImplementation(() => expectedUpdatedAt);
+
+    const usersDb = await getUsersDb();
+    const userZeroId = itemToObjectId(dummyAppData.users[0]);
+    const userOneId = itemToObjectId(dummyAppData.users[1]);
+
+    const { updatedAt: updatedAt1 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { updatedAt: updatedAt2 } =
+      (await usersDb.findOne({ _id: userOneId })) || toss(new TrialError());
+
+    expect(updatedAt1).not.toBe(expectedUpdatedAt);
+    expect(updatedAt2).not.toBe(expectedUpdatedAt);
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: itemToStringId(userZeroId),
+        connection_id: itemToStringId(userOneId)
+      })
+    ).resolves.toBeUndefined();
+
+    const { updatedAt: updatedAt3 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { updatedAt: updatedAt4 } =
+      (await usersDb.findOne({ _id: userOneId })) || toss(new TrialError());
+
+    expect(updatedAt3).toBe(expectedUpdatedAt);
+    expect(updatedAt4).toBe(expectedUpdatedAt);
+  });
+
+  it('is a no-op (on connections) if the users are already connected', async () => {
+    expect.hasAssertions();
+
+    const usersDb = await getUsersDb();
+    const userZeroId = itemToObjectId(dummyAppData.users[0]);
+    const userTwoId = itemToObjectId(dummyAppData.users[2]);
+
+    const { connections: connections1 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { connections: connections2 } =
+      (await usersDb.findOne({ _id: userTwoId })) || toss(new TrialError());
+
+    expect(connections1).toStrictEqual(dummyAppData.users[0].connections);
+    expect(connections2).toStrictEqual(dummyAppData.users[2].connections);
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: itemToStringId(userZeroId),
+        connection_id: itemToStringId(userTwoId)
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: itemToStringId(userTwoId),
+        connection_id: itemToStringId(userZeroId)
+      })
+    ).resolves.toBeUndefined();
+
+    const { connections: connections3 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { connections: connections4 } =
+      (await usersDb.findOne({ _id: userTwoId })) || toss(new TrialError());
+
+    expect(connections3).toStrictEqual(dummyAppData.users[0].connections);
+    expect(connections4).toStrictEqual(dummyAppData.users[2].connections);
+  });
+
+  it('rejects if attempting to connect a user to themselves', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: itemToStringId(dummyAppData.users[0]),
+        connection_id: itemToStringId(dummyAppData.users[0])
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.IllegalCyclicalConnection()
+    });
+  });
+
+  it('rejects if user_id or connection_id are undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: 'does-not-exist',
+        connection_id: itemToStringId(dummyAppData.users[0])
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('does-not-exist')
+    });
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: undefined,
+        connection_id: itemToStringId(dummyAppData.users[0])
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('user_id', 'parameter')
+    });
+
+    const user_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.createUserConnection({
+        user_id,
+        connection_id: itemToStringId(dummyAppData.users[0])
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(user_id, 'user')
+    });
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: itemToStringId(dummyAppData.users[0]),
+        connection_id: 'does-not-exist'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('does-not-exist')
+    });
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: itemToStringId(dummyAppData.users[0]),
+        connection_id: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('connection_id', 'parameter')
+    });
+
+    const connection_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: itemToStringId(dummyAppData.users[0]),
+        connection_id
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(connection_id, 'user')
+    });
+
+    await expect(
+      Backend.createUserConnection({
+        user_id: connection_id,
+        connection_id: itemToStringId(dummyAppData.users[0])
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(connection_id, 'user')
+    });
   });
 });
 
@@ -3863,7 +4345,7 @@ describe('::updateOpportunity', () => {
   });
 });
 
-// TODO: also updates updatedAt
+// TODO: also updates updatedAt and deduplicates keywords and lowercases them
 describe('::updateArticle', () => {
   it('updates an existing page', async () => {
     expect.hasAssertions();
@@ -4444,7 +4926,7 @@ describe('::deleteUserConnection', () => {
     expect(connections4.some((id) => id.equals(userZeroId))).toBeFalse();
   });
 
-  it("deleting a connection updates both users' updateAt property", async () => {
+  it("updates both users' updateAt property", async () => {
     expect.hasAssertions();
 
     const expectedUpdatedAt = mockDateNowMs + 10 ** 5;

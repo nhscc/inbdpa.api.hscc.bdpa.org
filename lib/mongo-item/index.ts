@@ -88,7 +88,7 @@ export async function itemExists<T extends Document>(
     typeof id === 'string' &&
     idProperty === '_id'
   ) {
-    id = new ObjectId(id);
+    id = itemToObjectId(id);
   }
 
   return (

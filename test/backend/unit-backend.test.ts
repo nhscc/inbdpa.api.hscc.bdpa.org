@@ -17,7 +17,6 @@ import {
   type NewOpportunity,
   type NewArticle,
   type PublicUser,
-  type PublicSession,
   type PublicOpportunity,
   type PublicInfo,
   type PublicArticle,
@@ -4664,9 +4663,71 @@ describe('::updateOpportunity', () => {
     expect.hasAssertions();
 
     const {
-      MAX_OPPORTUNITY_CONTENTS_LENGTH_BYTES: maxContentsLength,
+      MAX_OPPORTUNITY_CONTENTS_LENGTH_BYTES: maxContentLength,
       MAX_OPPORTUNITY_TITLE_LENGTH: maxTitleLength
     } = getEnv();
+
+    const newOpportunities: [
+      Parameters<typeof Backend.createOpportunity>[0]['data'],
+      string
+    ][] = [
+      [undefined, ErrorMessage.InvalidJSON()],
+      ['string data', ErrorMessage.InvalidJSON()],
+      [
+        { contents: null },
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { contents: false },
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { contents: 'x'.repeat(maxContentLength + 1) },
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { title: '' },
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        { title: 5 },
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        { title: null },
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        { title: 'x'.repeat(maxTitleLength + 1) },
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        {
+          creator_id: 5
+        },
+        ErrorMessage.UnknownField('creator_id')
+      ],
+      [
+        {
+          creator_id: 'bad'
+        },
+        ErrorMessage.UnknownField('creator_id')
+      ],
+      [
+        {
+          contents: 'new content',
+          type: 'administrator'
+        },
+        ErrorMessage.UnknownField('type')
+      ]
+    ];
+
+    await expectExceptionsWithMatchingErrors(newOpportunities, (data) =>
+      Backend.updateOpportunity({
+        opportunity_id: itemToStringId(dummyAppData.opportunities[0]),
+        data
+      })
+    );
   });
 });
 
@@ -4842,9 +4903,98 @@ describe('::updateArticle', () => {
     expect.hasAssertions();
 
     const {
-      MAX_ARTICLE_CONTENTS_LENGTH_BYTES: maxContentsLength,
-      MAX_ARTICLE_TITLE_LENGTH: maxTitleLength
+      MAX_ARTICLE_CONTENTS_LENGTH_BYTES: maxContentLength,
+      MAX_ARTICLE_TITLE_LENGTH: maxTitleLength,
+      MAX_ARTICLE_KEYWORDS: maxKeywords,
+      MAX_ARTICLE_KEYWORD_LENGTH: maxKeywordLength
     } = getEnv();
+
+    const newArticles: [
+      Parameters<typeof Backend.createArticle>[0]['data'],
+      string
+    ][] = [
+      [undefined, ErrorMessage.InvalidJSON()],
+      ['string data', ErrorMessage.InvalidJSON()],
+      [
+        { contents: null },
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { contents: false },
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { contents: 'x'.repeat(maxContentLength + 1) },
+        ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
+      ],
+      [
+        { title: '' },
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        { title: 5 },
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        { title: null },
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [
+        { title: 'x'.repeat(maxTitleLength + 1) },
+        ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
+      ],
+      [{ keywords: null }, ErrorMessage.InvalidFieldValue('keywords')],
+      [{ keywords: 5 }, ErrorMessage.InvalidFieldValue('keywords')],
+      [
+        {
+          keywords: Array.from({ length: maxKeywords + 1 }).map((_, index) =>
+            index.toString()
+          )
+        },
+        ErrorMessage.TooMany('keywords', maxKeywords)
+      ],
+      [
+        {
+          keywords: Array.from({ length: maxKeywords }).map((_, index) =>
+            index.toString().repeat(maxKeywordLength + 1)
+          )
+        },
+        ErrorMessage.InvalidArrayValue(
+          'keywords',
+          '0'.repeat(maxKeywordLength + 1),
+          0
+        )
+      ],
+      [
+        { keywords: ['ok', 'ok', 5] },
+        ErrorMessage.InvalidArrayValue('keywords', '5', 2)
+      ],
+      [
+        { keywords: ['ok', null, 'ok'] },
+        ErrorMessage.InvalidArrayValue('keywords', 'null', 1)
+      ],
+      [
+        { keywords: ['ok', '', 'ok'] },
+        ErrorMessage.InvalidArrayValue('keywords', '', 1)
+      ],
+      [
+        { keywords: ['not alphanumeric'] },
+        ErrorMessage.InvalidArrayValue('keywords', 'not alphanumeric', 0)
+      ],
+      [{ creator_id: 5 }, ErrorMessage.UnknownField('creator_id')],
+      [{ creator_id: 'bad' }, ErrorMessage.UnknownField('creator_id')],
+      [
+        { contents: 'new content', type: 'administrator' },
+        ErrorMessage.UnknownField('type')
+      ]
+    ];
+
+    await expectExceptionsWithMatchingErrors(newArticles, (data) =>
+      Backend.updateArticle({
+        article_id: itemToStringId(dummyAppData.articles[0]),
+        data
+      })
+    );
   });
 });
 

@@ -3521,7 +3521,7 @@ describe('::createUserConnection', () => {
     expect(connections4.some((id) => id.equals(userZeroId))).toBeTrue();
   });
 
-  it("updates both users' updateAt property", async () => {
+  it("updates both users' updatedAt property", async () => {
     expect.hasAssertions();
 
     const expectedUpdatedAt = mockDateNowMs + 10 ** 5;
@@ -3932,7 +3932,7 @@ describe('::updateUser', () => {
     );
   });
 
-  it('updates updateAt', async () => {
+  it('updates updatedAt', async () => {
     expect.hasAssertions();
 
     const expectedUpdatedAt = mockDateNowMs + 10 ** 5;
@@ -4008,7 +4008,7 @@ describe('::updateUser', () => {
     });
   });
 
-  it('rejects when attempting to update a user to a duplicate email', async () => {
+  it('rejects when attempting to update a user to a duplicate email that is not their own', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -4018,6 +4018,14 @@ describe('::updateUser', () => {
         data: { email: dummyAppData.users[0].email }
       })
     ).rejects.toMatchObject({ message: ErrorMessage.DuplicateFieldValue('email') });
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id: itemToStringId(dummyAppData.users[1]),
+        data: { email: dummyAppData.users[1].email }
+      })
+    ).resolves.toBeUndefined();
   });
 
   it('rejects if fullName passed in V1 mode or fullName is not string in V2 mode', async () => {
@@ -4515,37 +4523,32 @@ describe('::renewSession', () => {
   });
 });
 
-// TODO: also updates updatedAt
 describe('::updateOpportunity', () => {
   it('updates an existing opportunity', async () => {
     expect.hasAssertions();
 
-    const usersDb = (await getDb({ name: 'app' })).collection('users');
-    const { blogName } = dummyAppData.users[2];
-
-    const patchBlog: PatchBlog = {
-      name: 'new-name',
-      navLinks: [{ href: '//google.com', text: 'new google link' }],
-      rootPage: 'contact'
-    };
+    const opportunitiesDb = await getOpportunitiesDb();
+    const opportunityId = itemToObjectId(dummyAppData.opportunities[0]);
+    const patchOpportunity: PatchOpportunity = { title: 'patch title' };
 
     await expect(
-      usersDb.countDocuments({ _id: dummyAppData.users[2]._id, blogName: 'new-name' })
+      opportunitiesDb.countDocuments({
+        _id: opportunityId,
+        ...patchOpportunity
+      })
     ).resolves.toBe(0);
 
     await expect(
-      Backend.updateBlog({
-        blogName,
-        data: patchBlog
+      Backend.updateOpportunity({
+        opportunity_id: itemToStringId(opportunityId),
+        data: patchOpportunity
       })
     ).resolves.toBeUndefined();
 
     await expect(
-      usersDb.countDocuments({
-        _id: dummyAppData.users[2]._id,
-        blogName: 'new-name',
-        navLinks: patchBlog.navLinks,
-        blogRootPage: patchBlog.rootPage
+      opportunitiesDb.countDocuments({
+        _id: opportunityId,
+        ...patchOpportunity
       })
     ).resolves.toBe(1);
   });
@@ -4554,34 +4557,69 @@ describe('::updateOpportunity', () => {
     expect.hasAssertions();
 
     const infoDb = await getInfoDb();
-    const __provenance = 'fake-owner';
-    const newUser: NewUser = {
-      username: 'new-user',
-      email: 'new-user@email.com',
-      key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-      salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-      type: 'administrator'
-    };
+    const opportunitiesDb = await getOpportunitiesDb();
+
+    const opportunityId = itemToObjectId(dummyAppData.opportunities[2]);
+    const patchOpportunity: PatchOpportunity = { views: 'increment' };
+
+    await expect(
+      opportunitiesDb.findOne({ _id: opportunityId })
+    ).resolves.toHaveProperty('views', dummyAppData.opportunities[2].views);
 
     await expect(infoDb.findOne()).resolves.toHaveProperty(
-      'users',
-      dummyAppData.users.length
+      'views',
+      dummyAppData.info[0].views
     );
 
-    await Backend.createUser({ apiVersion: 1, __provenance, data: newUser });
+    await Backend.updateOpportunity({
+      opportunity_id: itemToStringId(opportunityId),
+      data: patchOpportunity
+    });
+
+    await expect(
+      opportunitiesDb.findOne({ _id: opportunityId })
+    ).resolves.toHaveProperty('views', dummyAppData.opportunities[2].views + 1);
 
     await expect(infoDb.findOne()).resolves.toHaveProperty(
-      'users',
-      dummyAppData.users.length + 1
+      'views',
+      dummyAppData.info[0].views + 1
     );
+  });
+
+  it('updates updatedAt', async () => {
+    expect.hasAssertions();
+
+    const expectedUpdatedAt = mockDateNowMs + 10 ** 5;
+
+    jest.spyOn(Date, 'now').mockImplementation(() => expectedUpdatedAt);
+
+    const opportunitiesDb = await getOpportunitiesDb();
+    const opportunityId = itemToObjectId(dummyAppData.opportunities[0]);
+    const opportunity_id = itemToStringId(dummyAppData.opportunities[0]);
+
+    const { updatedAt: updatedAt1 } =
+      (await opportunitiesDb.findOne({ _id: opportunityId })) ||
+      toss(new TrialError());
+
+    expect(updatedAt1).not.toBe(expectedUpdatedAt);
+
+    await expect(
+      Backend.updateOpportunity({ opportunity_id, data: { title: 'new title' } })
+    ).resolves.toBeUndefined();
+
+    const { updatedAt: updatedAt2 } =
+      (await opportunitiesDb.findOne({ _id: opportunityId })) ||
+      toss(new TrialError());
+
+    expect(updatedAt2).toBe(expectedUpdatedAt);
   });
 
   it('rejects if no data passed in', async () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.updateBlog({
-        blogName: dummyAppData.users[2].blogName,
+      Backend.updateOpportunity({
+        opportunity_id: itemToStringId(dummyAppData.opportunities[0]),
         data: {}
       })
     ).rejects.toMatchObject({
@@ -4593,21 +4631,32 @@ describe('::updateOpportunity', () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.updateBlog({
-        blogName: 'dne',
-        data: {}
+      Backend.updateOpportunity({
+        opportunity_id: undefined,
+        data: { title: 'another update' }
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound('dne', 'blog')
+      message: ErrorMessage.InvalidItem('opportunity_id', 'parameter')
     });
 
     await expect(
-      Backend.updateBlog({
-        blogName: undefined,
-        data: {}
+      Backend.updateOpportunity({
+        opportunity_id: 'bad',
+        data: { title: 'another update' }
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+      message: ErrorMessage.InvalidObjectId('bad')
+    });
+
+    const opportunity_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.updateOpportunity({
+        opportunity_id,
+        data: { title: 'another update' }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(opportunity_id, 'opportunity')
     });
   });
 
@@ -4615,212 +4664,187 @@ describe('::updateOpportunity', () => {
     expect.hasAssertions();
 
     const {
-      MAX_BLOG_NAME_LENGTH: maxBLength,
-      MAX_NAV_LINK_HREF_LENGTH: maxHLength,
-      MAX_NAV_LINK_TEXT_LENGTH: maxTLength
+      MAX_OPPORTUNITY_CONTENTS_LENGTH_BYTES: maxContentsLength,
+      MAX_OPPORTUNITY_TITLE_LENGTH: maxTitleLength
     } = getEnv();
-
-    const patchBlogs: [Parameters<typeof Backend.updateBlog>[0]['data'], string][] = [
-      [undefined as unknown as PatchBlog, ErrorMessage.InvalidJSON()],
-      ['string data' as PatchBlog, ErrorMessage.InvalidJSON()],
-      [
-        {
-          name: 'not alphanumeric'
-        },
-        ErrorMessage.InvalidStringLength('name', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          name: 'not-@lphanumeric'
-        },
-        ErrorMessage.InvalidStringLength('name', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          name: null as unknown as string
-        },
-        ErrorMessage.InvalidStringLength('name', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          name: 'x'.repeat(maxBLength + 1)
-        },
-        ErrorMessage.InvalidStringLength('name', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          name: ''
-        },
-        ErrorMessage.InvalidStringLength('name', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          rootPage: 'not alphanumeric'
-        },
-        ErrorMessage.InvalidStringLength('rootPage', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          rootPage: 'not-@lphanumeric'
-        },
-        ErrorMessage.InvalidStringLength('rootPage', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          rootPage: null as unknown as string
-        },
-        ErrorMessage.InvalidStringLength('rootPage', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          rootPage: 'x'.repeat(maxBLength + 1)
-        },
-        ErrorMessage.InvalidStringLength('rootPage', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          rootPage: ''
-        },
-        ErrorMessage.InvalidStringLength('rootPage', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          navLinks: null as unknown as NavigationLink[]
-        },
-        ErrorMessage.InvalidFieldValue('navLinks')
-      ],
-      [
-        {
-          navLinks: '[]' as unknown as NavigationLink[]
-        },
-        ErrorMessage.InvalidFieldValue('navLinks')
-      ],
-      [
-        {
-          navLinks: [null as unknown as NavigationLink]
-        },
-        ErrorMessage.InvalidArrayValue('navLinks', 'null')
-      ],
-      [
-        {
-          navLinks: [{ href: '//', text: 'yes' }, null as unknown as NavigationLink]
-        },
-        ErrorMessage.InvalidArrayValue('navLinks', 'null')
-      ],
-      [
-        {
-          navLinks: [new Date(Date.now()) as unknown as NavigationLink]
-        },
-        ErrorMessage.InvalidArrayValue(
-          'navLinks',
-          JSON.stringify(new Date(Date.now()))
-        )
-      ],
-      [
-        {
-          navLinks: [
-            { href: '//', text: 'yes', bad: 'bad' } as unknown as NavigationLink
-          ]
-        },
-        ErrorMessage.InvalidArrayValue(
-          'navLinks',
-          JSON.stringify({ href: '//', text: 'yes', bad: 'bad' })
-        )
-      ],
-      [
-        {
-          navLinks: [{ href: '//' } as unknown as NavigationLink]
-        },
-        ErrorMessage.InvalidArrayValue('navLinks', JSON.stringify({ href: '//' }))
-      ],
-      [
-        {
-          navLinks: [{ href: '+bad-link', text: 'bad' }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.href', '+bad-link')
-      ],
-      [
-        {
-          navLinks: [{ href: '/bad-link', text: 'bad' }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.href', '/bad-link')
-      ],
-      [
-        {
-          navLinks: [{ href: null as unknown as string, text: 'bad' }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.href', 'null')
-      ],
-      [
-        {
-          navLinks: [{ href: 5 as unknown as string, text: 'bad' }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.href', '5')
-      ],
-      [
-        {
-          navLinks: [{ href: 'x'.repeat(maxHLength + 1), text: 'bad' }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.href', 'x'.repeat(maxHLength + 1))
-      ],
-      [
-        {
-          navLinks: [{ href: '', text: 'bad' }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.href')
-      ],
-      [
-        {
-          navLinks: [{ href: '//bad', text: null as unknown as string }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.text', 'null')
-      ],
-      [
-        {
-          navLinks: [{ href: '//bad', text: 5 as unknown as string }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.text', '5')
-      ],
-      [
-        {
-          navLinks: [{ href: '//bad', text: 'x'.repeat(maxTLength + 1) }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.text', 'x'.repeat(maxTLength + 1))
-      ],
-      [
-        {
-          navLinks: [{ href: '//bad', text: '' }]
-        },
-        ErrorMessage.InvalidObjectKeyValue('navLink.text')
-      ],
-      [
-        {
-          navLinks: [
-            { href: '//ok', text: 'ok' },
-            { href: '//ok', text: 'ok' },
-            { href: '//ok', text: 'ok' },
-            { href: '//ok', text: 'ok' },
-            { href: '//ok', text: 'ok' },
-            { href: '//ok', text: 'ok' }
-          ]
-        },
-        ErrorMessage.TooMany('navLinks', Backend.navLinkUpperLimit)
-      ]
-    ];
-
-    await expectExceptionsWithMatchingErrors(patchBlogs, (data) => {
-      return Backend.updateBlog({
-        blogName: dummyAppData.users[2].blogName,
-        data
-      });
-    });
   });
 });
 
-// TODO: also updates updatedAt and deduplicates keywords and lowercases them
 describe('::updateArticle', () => {
-  it('todo', async () => {
+  it('updates an existing article', async () => {
     expect.hasAssertions();
+
+    const articlesDb = await getArticlesDb();
+    const articleId = itemToObjectId(dummyAppData.articles[0]);
+    const patchArticle: PatchArticle = { title: 'patch title' };
+
+    await expect(
+      articlesDb.countDocuments({
+        _id: articleId,
+        ...patchArticle
+      })
+    ).resolves.toBe(0);
+
+    await expect(
+      Backend.updateArticle({
+        article_id: itemToStringId(articleId),
+        data: patchArticle
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(
+      articlesDb.countDocuments({
+        _id: articleId,
+        ...patchArticle
+      })
+    ).resolves.toBe(1);
+  });
+
+  test('incrementing views is reflected in the system info', async () => {
+    expect.hasAssertions();
+
+    const infoDb = await getInfoDb();
+    const articlesDb = await getArticlesDb();
+
+    const articleId = itemToObjectId(dummyAppData.articles[2]);
+    const patchArticle: PatchArticle = { views: 'increment' };
+
+    await expect(articlesDb.findOne({ _id: articleId })).resolves.toHaveProperty(
+      'views',
+      dummyAppData.articles[2].views
+    );
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'views',
+      dummyAppData.info[0].views
+    );
+
+    await Backend.updateArticle({
+      article_id: itemToStringId(articleId),
+      data: patchArticle
+    });
+
+    await expect(articlesDb.findOne({ _id: articleId })).resolves.toHaveProperty(
+      'views',
+      dummyAppData.articles[2].views + 1
+    );
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'views',
+      dummyAppData.info[0].views + 1
+    );
+  });
+
+  it('updates updatedAt', async () => {
+    expect.hasAssertions();
+
+    const expectedUpdatedAt = mockDateNowMs + 10 ** 5;
+
+    jest.spyOn(Date, 'now').mockImplementation(() => expectedUpdatedAt);
+
+    const articlesDb = await getArticlesDb();
+    const articleId = itemToObjectId(dummyAppData.articles[0]);
+    const article_id = itemToStringId(dummyAppData.articles[0]);
+
+    const { updatedAt: updatedAt1 } =
+      (await articlesDb.findOne({ _id: articleId })) || toss(new TrialError());
+
+    expect(updatedAt1).not.toBe(expectedUpdatedAt);
+
+    await expect(
+      Backend.updateArticle({ article_id, data: { title: 'new title' } })
+    ).resolves.toBeUndefined();
+
+    const { updatedAt: updatedAt2 } =
+      (await articlesDb.findOne({ _id: articleId })) || toss(new TrialError());
+
+    expect(updatedAt2).toBe(expectedUpdatedAt);
+  });
+
+  it('deduplicates and lowercases keywords', async () => {
+    expect.hasAssertions();
+
+    const articlesDb = await getArticlesDb();
+    const articleId = itemToObjectId(dummyAppData.articles[0]);
+
+    const duped = { keywords: ['1', '1', 'one', 'ONE', 'OnE'] };
+    const deduped = { keywords: ['1', 'one'] };
+
+    await expect(
+      articlesDb.countDocuments({
+        _id: articleId,
+        ...deduped
+      })
+    ).resolves.toBe(0);
+
+    await expect(
+      Backend.updateArticle({
+        article_id: itemToStringId(articleId),
+        data: duped
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(
+      articlesDb.countDocuments({
+        _id: articleId,
+        ...deduped
+      })
+    ).resolves.toBe(1);
+  });
+
+  it('rejects if no data passed in', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.updateArticle({
+        article_id: itemToStringId(dummyAppData.articles[0]),
+        data: {}
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.EmptyJSONBody()
+    });
+  });
+
+  it('rejects if the article_id is undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.updateArticle({
+        article_id: undefined,
+        data: { title: 'another update' }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('article_id', 'parameter')
+    });
+
+    await expect(
+      Backend.updateArticle({
+        article_id: 'bad',
+        data: { title: 'another update' }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('bad')
+    });
+
+    const article_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.updateArticle({
+        article_id,
+        data: { title: 'another update' }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(article_id, 'article')
+    });
+  });
+
+  it('rejects if data is invalid or contains properties that violate limits', async () => {
+    expect.hasAssertions();
+
+    const {
+      MAX_ARTICLE_CONTENTS_LENGTH_BYTES: maxContentsLength,
+      MAX_ARTICLE_TITLE_LENGTH: maxTitleLength
+    } = getEnv();
   });
 });
 
@@ -5177,7 +5201,7 @@ describe('::deleteUserConnection', () => {
     expect(connections4.some((id) => id.equals(userZeroId))).toBeFalse();
   });
 
-  it("updates both users' updateAt property", async () => {
+  it("updates both users' updatedAt property", async () => {
     expect.hasAssertions();
 
     const expectedUpdatedAt = mockDateNowMs + 10 ** 5;
@@ -5331,7 +5355,7 @@ describe('::authAppUser', () => {
 test('system info is updated when users, sessions, opportunities, and articles are successfully created, updated, and deleted', async () => {
   expect.hasAssertions();
 
-  // TODO: emphasis on success! Failed things should not alter counts!
+  // * Emphasis on success! Failed things should not alter counts!
 
   const expectedV1SystemInfo = toPublicInfo(dummyAppData.info[0], {
     activeSessionCount: dummyActiveSessions.length,
@@ -5645,7 +5669,57 @@ test('system info is updated when users, sessions, opportunities, and articles a
     { ...expectedV2SystemInfo, articles: expectedV2SystemInfo.articles! - 2 }
   );
 
-  // TODO: update tests here
+  // * Begin updates
+
+  await Backend.updateUser({
+    apiVersion: 1,
+    user_id: itemToStringId(dummyAppData.users[1]),
+    data: { views: 'increment' }
+  });
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.updateUser({
+      apiVersion: 1,
+      user_id: itemToStringId(dummyAppData.articles[1]),
+      data: { views: 'increment' }
+    })
+  ).rejects.toMatchObject({ message: expect.stringContaining('not found') });
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.updateUser({
+      apiVersion: 1,
+      user_id: itemToStringId(dummyAppData.users[1]),
+      data: { views: 'increment', email: dummyAppData.users[2].email }
+    })
+  ).rejects.toMatchObject({ message: expect.stringContaining('already exists') });
+
+  await Backend.updateOpportunity({
+    opportunity_id: itemToStringId(dummyAppData.opportunities[1]),
+    data: { views: 'increment' }
+  });
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.updateOpportunity({
+      opportunity_id: itemToStringId(dummyAppData.articles[1]),
+      data: { views: 'increment' }
+    })
+  ).rejects.toMatchObject({ message: expect.stringContaining('not found') });
+
+  await Backend.updateArticle({
+    article_id: itemToStringId(dummyAppData.articles[2]),
+    data: { views: 'increment' }
+  });
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.updateArticle({
+      article_id: itemToStringId(dummyAppData.users[1]),
+      data: { views: 'increment' }
+    })
+  ).rejects.toMatchObject({ message: expect.stringContaining('not found') });
 
   await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
     { ...expectedV1SystemInfo, views: expectedV1SystemInfo.views + 3 }

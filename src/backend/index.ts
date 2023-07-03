@@ -518,6 +518,7 @@ export async function createUser({
     __provenance,
     username,
     email,
+    /* istanbul ignore next */
     fullName: apiVersion === 2 ? fullName || null : null,
     type,
     salt: salt.toLowerCase(),
@@ -792,29 +793,28 @@ export async function updateUser({
   );
 
   try {
-    const [result] = await Promise.all([
-      usersDb.updateOne(
-        { _id: itemToObjectId(user_id) },
-        {
-          $set: {
-            updatedAt: Date.now(),
-            ...(email ? { email } : {}),
-            ...(fullName ? { fullName } : {}),
-            ...(key ? { key: key.toLowerCase() } : {}),
-            ...(salt ? { salt: salt.toLowerCase() } : {}),
-            ...(type ? { type } : {}),
-            ...sectionUpdates
-          },
-          ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
-        }
-      ),
-      shouldIncrementViews
-        ? infoDb.updateOne({}, { $inc: { views: 1 } })
-        : Promise.resolve()
-    ]);
+    const { matchedCount } = await usersDb.updateOne(
+      { _id: itemToObjectId(user_id) },
+      {
+        $set: {
+          updatedAt: Date.now(),
+          ...(email ? { email } : {}),
+          ...(fullName ? { fullName } : {}),
+          ...(key ? { key: key.toLowerCase() } : {}),
+          ...(salt ? { salt: salt.toLowerCase() } : {}),
+          ...(type ? { type } : {}),
+          ...sectionUpdates
+        },
+        ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
+      }
+    );
 
-    if (result.matchedCount !== 1) {
+    if (matchedCount !== 1) {
       throw new ItemNotFoundError(user_id, 'user');
+    }
+
+    if (shouldIncrementViews) {
+      await infoDb.updateOne({}, { $inc: { views: 1 } });
     }
   } catch (error) {
     if (
@@ -869,25 +869,24 @@ export async function updateOpportunity({
   const { contents, title, views } = data;
   const shouldIncrementViews = !!views;
 
-  const [result] = await Promise.all([
-    opportunitiesDb.updateOne(
-      { _id: itemToObjectId(opportunity_id) },
-      {
-        $set: {
-          updateAt: Date.now(),
-          ...(contents ? { contents } : {}),
-          ...(title ? { title } : {})
-        },
-        ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
-      }
-    ),
-    shouldIncrementViews
-      ? infoDb.updateOne({}, { $inc: { views: 1 } })
-      : Promise.resolve()
-  ]);
+  const { matchedCount } = await opportunitiesDb.updateOne(
+    { _id: itemToObjectId(opportunity_id) },
+    {
+      $set: {
+        updatedAt: Date.now(),
+        ...(contents ? { contents } : {}),
+        ...(title ? { title } : {})
+      },
+      ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
+    }
+  );
 
-  if (result.matchedCount !== 1) {
+  if (matchedCount !== 1) {
     throw new ItemNotFoundError(opportunity_id, 'opportunity');
+  }
+
+  if (shouldIncrementViews) {
+    await infoDb.updateOne({}, { $inc: { views: 1 } });
   }
 }
 
@@ -909,28 +908,27 @@ export async function updateArticle({
   const { contents, title, keywords, views } = data;
   const shouldIncrementViews = !!views;
 
-  const [result] = await Promise.all([
-    articlesDb.updateOne(
-      { _id: itemToObjectId(article_id) },
-      {
-        $set: {
-          updateAt: Date.now(),
-          ...(contents ? { contents } : {}),
-          ...(title ? { title } : {}),
-          ...(keywords
-            ? { keywords: Array.from(new Set(keywords.map((s) => s.toLowerCase()))) }
-            : {})
-        },
-        ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
-      }
-    ),
-    shouldIncrementViews
-      ? infoDb.updateOne({}, { $inc: { views: 1 } })
-      : Promise.resolve()
-  ]);
+  const { matchedCount } = await articlesDb.updateOne(
+    { _id: itemToObjectId(article_id) },
+    {
+      $set: {
+        updatedAt: Date.now(),
+        ...(contents ? { contents } : {}),
+        ...(title ? { title } : {}),
+        ...(keywords
+          ? { keywords: Array.from(new Set(keywords.map((s) => s.toLowerCase()))) }
+          : {})
+      },
+      ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
+    }
+  );
 
-  if (result.matchedCount !== 1) {
+  if (matchedCount !== 1) {
     throw new ItemNotFoundError(article_id, 'article');
+  }
+
+  if (shouldIncrementViews) {
+    await infoDb.updateOne({}, { $inc: { views: 1 } });
   }
 }
 

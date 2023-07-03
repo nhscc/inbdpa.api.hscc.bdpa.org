@@ -17,7 +17,6 @@ import {
   type ArticleId,
   type OpportunityId,
   type SessionId,
-  type NewUser,
   type NewArticle,
   type NewOpportunity,
   type NewSession,
@@ -327,9 +326,9 @@ export async function getOpportunity({
 }
 
 export async function getInfo({
-  allowArticles
+  apiVersion
 }: {
-  allowArticles: boolean;
+  apiVersion: 1 | 2;
 }): Promise<PublicInfo> {
   const infoDb = await getInfoDb();
   const sessionsDb = await getSessionsDb();
@@ -343,7 +342,7 @@ export async function getInfo({
     throw new AppValidationError('system info is missing');
   }
 
-  return toPublicInfo(info, { activeSessionCount, allowArticles });
+  return toPublicInfo(info, { activeSessionCount, allowArticles: apiVersion === 2 });
 }
 
 export async function getArticle({
@@ -500,7 +499,7 @@ export async function createUser({
   apiVersion,
   __provenance
 }: {
-  data: LiteralUnknownUnion<NewUser>;
+  data: unknown;
   apiVersion: 1 | 2;
   __provenance: TokenAttributeOwner;
 }): Promise<PublicUser> {
@@ -519,7 +518,7 @@ export async function createUser({
     __provenance,
     username,
     email,
-    fullName: apiVersion === 2 ? fullName : null,
+    fullName: apiVersion === 2 ? fullName || null : null,
     type,
     salt: salt.toLowerCase(),
     key: key.toLowerCase(),
@@ -569,25 +568,42 @@ export async function createUser({
 
 export async function createSession({
   data,
-  includeArticleInErrorMessage,
+  apiVersion,
   __provenance
 }: {
   data: LiteralUnknownUnion<NewSession>;
-  includeArticleInErrorMessage: boolean;
+  apiVersion: 1 | 2;
   __provenance: TokenAttributeOwner;
 }): Promise<SessionId> {
   if (typeof __provenance !== 'string') {
     throw new AppValidationError('invalid provenance token attribute owner');
   }
 
-  validateNewSessionData(data, { includeArticleInErrorMessage });
+  validateNewSessionData(data, { allowArticle: apiVersion === 2 });
+
+  const sessionDb = await getSessionsDb();
+  const usersDb = await getUsersDb();
 
   const now = Date.now();
-  const sessionDb = await getSessionsDb();
   const { user_id, view, viewed_id } = data;
 
   const userId = user_id !== null ? itemToObjectId(user_id) : null;
   const viewedId = viewed_id !== null ? itemToObjectId(viewed_id) : null;
+
+  if (userId && !(await itemExists(usersDb, userId))) {
+    throw new ItemNotFoundError(user_id, 'user');
+  }
+
+  const xDb = await (view === 'article'
+    ? getArticlesDb()
+    : view === 'opportunity'
+    ? getOpportunitiesDb()
+    : usersDb);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (viewedId && !(await itemExists<any>(xDb, viewedId))) {
+    throw new ItemNotFoundError(viewed_id, view === 'profile' ? 'user' : view);
+  }
 
   const newSession: InternalSession = {
     _id: new ObjectId(),

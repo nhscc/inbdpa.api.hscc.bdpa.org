@@ -261,8 +261,10 @@ export type PublicUser = WithSessionCounts<
  */
 export type NewUser = Pick<
   InternalUser,
-  'username' | 'salt' | 'email' | 'key' | 'type' | 'fullName'
->;
+  'username' | 'salt' | 'email' | 'key' | 'type'
+> & {
+  fullName?: string;
+};
 
 /**
  * The shape of a patch application user.

@@ -1,4 +1,6 @@
 import { isPromise } from 'node:util/types';
+import { TrialError } from 'named-app-errors';
+
 import type { Promisable } from 'type-fest';
 
 // TODO: make this into a package alongside the other helpers like itemExists
@@ -30,11 +32,13 @@ export async function expectExceptionsWithMatchingErrors<
       }
 
       if (!errored) {
-        return `assertion failed: an exception did not occur for spec element at index #${index}: ${JSON.stringify(
-          params,
-          undefined,
-          2
-        )}\n\nexpected error message: ${message}`;
+        throw new TrialError(
+          `assertion failed: an exception did not occur for spec element at index #${index}: ${JSON.stringify(
+            params,
+            undefined,
+            2
+          )}\n\nExpected error message: ${message}`
+        );
       }
 
       return expect({ index, params, error }).toMatchObject({

@@ -53,6 +53,7 @@ import {
   updatedAtMidValue
 } from 'testverse/db';
 import { toss } from 'toss-expression';
+import { isPlainObject } from 'multiverse/is-plain-object';
 
 setupMemoryServerOverride();
 useMockDateNow();
@@ -1536,19 +1537,19 @@ describe('::getOpportunity', () => {
 });
 
 describe('::getInfo', () => {
-  it('returns system information wrt allowArticles and only counting active sessions', async () => {
+  it('returns system information wrt apiVersion and only counting active sessions', async () => {
     expect.hasAssertions();
 
     const info = dummyAppData.info[0];
 
-    await expect(Backend.getInfo({ allowArticles: false })).resolves.toStrictEqual(
+    await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual(
       toPublicInfo(info, {
         activeSessionCount: dummyActiveSessions.length,
         allowArticles: false
       })
     );
 
-    await expect(Backend.getInfo({ allowArticles: true })).resolves.toStrictEqual(
+    await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual(
       toPublicInfo(info, {
         activeSessionCount: dummyActiveSessions.length,
         allowArticles: true
@@ -1560,7 +1561,7 @@ describe('::getInfo', () => {
     expect.hasAssertions();
 
     await (await getInfoDb()).deleteMany();
-    await expect(Backend.getInfo({ allowArticles: true })).rejects.toMatchObject({
+    await expect(Backend.getInfo({ apiVersion: 2 })).rejects.toMatchObject({
       message: expect.stringContaining('system info is missing')
     });
   });
@@ -2131,13 +2132,12 @@ describe('::getUserConnections', () => {
   });
 });
 
-// TODO: creatingX is reflected in system info
 describe('::createUser', () => {
-  it('creates and returns a new administrator user', async () => {
+  it('creates and returns a new V1 user without sessions or fullName', async () => {
     expect.hasAssertions();
 
     const __provenance = 'fake-owner';
-    const newUser: Omit<Required<NewUser>, 'blogName'> = {
+    const newUser: NewUser = {
       username: 'new-user',
       email: 'new-user@email.com',
       key: '0'.repeat(getEnv().USER_KEY_LENGTH),
@@ -2146,139 +2146,90 @@ describe('::createUser', () => {
     };
 
     await expect(
-      Backend.createUser({ __provenance, data: newUser })
-    ).resolves.toStrictEqual<PublicUserAdministrator>({
+      Backend.createUser({ apiVersion: 1, __provenance, data: newUser })
+    ).resolves.toStrictEqual<PublicUser>({
       user_id: expect.any(String),
       username: newUser.username,
       email: newUser.email,
       salt: newUser.salt,
-      type: 'administrator'
+      type: 'administrator',
+      sections: {
+        about: null,
+        education: [],
+        experience: [],
+        skills: [],
+        volunteering: []
+      },
+      views: 0,
+      createdAt: mockDateNowMs,
+      updatedAt: mockDateNowMs
     });
 
-    await expect(
-      (await getDb({ name: 'app' })).collection('users').countDocuments(newUser)
-    ).resolves.toBe(1);
+    await expect((await getUsersDb()).countDocuments(newUser)).resolves.toBe(1);
   });
 
-  it('creates and returns a new blogger user', async () => {
+  it('creates and returns a new V2 user with sessions and fullName', async () => {
     expect.hasAssertions();
 
     const __provenance = 'fake-owner';
-    const newUser: Required<NewUser> = {
+    const newUser: NewUser = {
       username: 'new-user',
       email: 'new-user@email.com',
       key: '0'.repeat(getEnv().USER_KEY_LENGTH),
       salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-      type: 'blogger',
-      blogName: 'blog-name'
+      type: 'administrator',
+      fullName: 'Elizabeth Warren'
     };
 
     await expect(
-      Backend.createUser({ __provenance, data: newUser })
-    ).resolves.toStrictEqual<PublicUserBlogger>({
+      Backend.createUser({ apiVersion: 2, __provenance, data: newUser })
+    ).resolves.toStrictEqual<PublicUser>({
       user_id: expect.any(String),
       username: newUser.username,
       email: newUser.email,
       salt: newUser.salt,
-      type: 'blogger',
-      banned: false,
-      blogName: newUser.blogName
+      type: 'administrator',
+      fullName: 'Elizabeth Warren',
+      sections: {
+        about: null,
+        education: [],
+        experience: [],
+        skills: [],
+        volunteering: []
+      },
+      views: 0,
+      sessions: 0,
+      createdAt: mockDateNowMs,
+      updatedAt: mockDateNowMs
     });
 
-    await expect(
-      (await getDb({ name: 'app' })).collection('users').countDocuments(newUser)
-    ).resolves.toBe(1);
+    await expect((await getUsersDb()).countDocuments(newUser)).resolves.toBe(1);
   });
 
-  it('creates default home page for and adds default navigation link to new blogger user', async () => {
+  it('creating a user is reflected in the system info', async () => {
     expect.hasAssertions();
 
-    const db = await getDb({ name: 'app' });
-    const usersDb = db.collection<InternalUser>('users');
-    const pagesDb = db.collection<InternalPage>('pages');
+    const infoDb = await getInfoDb();
+    const __provenance = 'fake-owner';
+    const newUser: NewUser = {
+      username: 'new-user',
+      email: 'new-user@email.com',
+      key: '0'.repeat(getEnv().USER_KEY_LENGTH),
+      salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
+      type: 'administrator'
+    };
 
-    const { user_id: userId } = await Backend.createUser({
-      __provenance: 'fake-owner',
-      data: {
-        username: 'new-user',
-        email: 'new-user@email.com',
-        key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-        salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-        type: 'blogger',
-        blogName: 'blog-name'
-      }
-    });
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'users',
+      dummyAppData.users.length
+    );
 
-    await expect(
-      usersDb.countDocuments({
-        username: 'new-user',
-        navLinks: Backend.defaultNavLinks
-      })
-    ).resolves.toBe(1);
+    await Backend.createUser({ apiVersion: 1, __provenance, data: newUser });
 
-    await expect(
-      pagesDb.countDocuments({
-        blog_id: itemToObjectId(userId),
-        ...Backend.defaultHomePage
-      })
-    ).resolves.toBe(1);
-
-    const { user_id: adminId } = await Backend.createUser({
-      __provenance: 'fake-owner',
-      data: {
-        username: 'new-admin',
-        email: 'new-admin@email.com',
-        key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-        salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-        type: 'administrator'
-      }
-    });
-
-    await expect(
-      pagesDb.countDocuments({
-        blog_id: itemToObjectId(adminId)
-      })
-    ).resolves.toBe(0);
-
-    await expect(
-      usersDb.countDocuments({
-        _id: itemToObjectId(adminId),
-        navLinks: { $exists: false }
-      })
-    ).resolves.toBe(1);
-  });
-
-  it('creates and returns new users without usernames', async () => {
-    expect.hasAssertions();
-
-    const usersDb = (await getDb({ name: 'app' })).collection('users');
-
-    await expect(usersDb.countDocuments({ username: null })).resolves.toBe(1);
-
-    await Backend.createUser({
-      __provenance: 'fake-owner',
-      data: {
-        email: 'new-user@email.com',
-        key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-        salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-        type: 'blogger',
-        blogName: 'blog-name'
-      }
-    });
-
-    await expect(usersDb.countDocuments({ username: null })).resolves.toBe(2);
-
-    await Backend.createUser({
-      __provenance: 'fake-owner',
-      data: {
-        email: 'new-user-2@email.com',
-        key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-        salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-        type: 'administrator'
-      }
-    });
-
-    await expect(usersDb.countDocuments({ username: null })).resolves.toBe(3);
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'users',
+      dummyAppData.users.length + 1
+    );
   });
 
   it('rejects if __provenance is not a string', async () => {
@@ -2286,6 +2237,7 @@ describe('::createUser', () => {
 
     await expect(
       Backend.createUser({
+        apiVersion: 1,
         data: {
           username: 'test-user',
           email: 'new-user@email.com',
@@ -2307,12 +2259,13 @@ describe('::createUser', () => {
 
     await expect(
       Backend.createUser({
+        apiVersion: 1,
         data: {
           username: dummyAppData.users[0].username,
           email: 'new-user@email.com',
           key: '0'.repeat(getEnv().USER_KEY_LENGTH),
           salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-          type: 'administrator'
+          type: 'staff'
         },
         __provenance: 'fake-owner'
       })
@@ -2322,42 +2275,101 @@ describe('::createUser', () => {
 
     await expect(
       Backend.createUser({
+        apiVersion: 1,
         data: {
           username: 'new-user',
           email: dummyAppData.users[0].email,
           key: '0'.repeat(getEnv().USER_KEY_LENGTH),
           salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-          type: 'blogger',
-          blogName: 'some-blog'
+          type: 'inner'
         },
         __provenance: 'fake-owner'
       })
     ).rejects.toMatchObject({ message: ErrorMessage.DuplicateFieldValue('email') });
   });
 
-  it('rejects when attempting to create a user with a duplicate blog name', async () => {
+  it('rejects if fullName passed in V1 mode or fullName is not string in V2 mode', async () => {
     expect.hasAssertions();
-
-    assert(dummyAppData.users[2].blogName !== undefined);
 
     await expect(
       Backend.createUser({
+        apiVersion: 1,
+        data: {
+          username: dummyAppData.users[0].username,
+          email: 'new-user@email.com',
+          key: '0'.repeat(getEnv().USER_KEY_LENGTH),
+          salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
+          type: 'inner',
+          fullName: 'big dog'
+        },
+        __provenance: 'fake-owner'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.UnknownField('fullName')
+    });
+
+    await expect(
+      Backend.createUser({
+        apiVersion: 1,
+        data: {
+          username: dummyAppData.users[0].username,
+          email: 'new-user@email.com',
+          key: '0'.repeat(getEnv().USER_KEY_LENGTH),
+          salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
+          type: 'inner',
+          fullName: null
+        },
+        __provenance: 'fake-owner'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.UnknownField('fullName')
+    });
+
+    await expect(
+      Backend.createUser({
+        apiVersion: 2,
         data: {
           username: 'new-user',
           email: 'new-user@email.com',
           key: '0'.repeat(getEnv().USER_KEY_LENGTH),
           salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-          type: 'blogger',
-          blogName: dummyAppData.users[2].blogName
+          type: 'inner'
         },
         __provenance: 'fake-owner'
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.DuplicateFieldValue('blogName')
+      message: ErrorMessage.InvalidStringLength(
+        'fullName',
+        1,
+        getEnv().MAX_USER_FULLNAME_LENGTH,
+        'alphanumeric (with spaces)'
+      )
+    });
+
+    await expect(
+      Backend.createUser({
+        apiVersion: 2,
+        data: {
+          username: 'new-user',
+          email: 'new-user@email.com',
+          key: '0'.repeat(getEnv().USER_KEY_LENGTH),
+          salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
+          type: 'inner',
+          fullName: null
+        },
+        __provenance: 'fake-owner'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidStringLength(
+        'fullName',
+        1,
+        getEnv().MAX_USER_FULLNAME_LENGTH,
+        'alphanumeric (with spaces)'
+      )
     });
   });
 
-  it('rejects if data is invalid or contains properties that violates limits', async () => {
+  it('rejects if data is invalid or contains properties that violate limits', async () => {
     expect.hasAssertions();
 
     const {
@@ -2365,7 +2377,6 @@ describe('::createUser', () => {
       MAX_USER_NAME_LENGTH: maxULength,
       MIN_USER_EMAIL_LENGTH: minELength,
       MAX_USER_EMAIL_LENGTH: maxELength,
-      MAX_BLOG_NAME_LENGTH: maxBLength,
       USER_SALT_LENGTH: saltLength,
       USER_KEY_LENGTH: keyLength
     } = getEnv();
@@ -2559,34 +2570,35 @@ describe('::createUser', () => {
       ],
       [
         {
-          username: 'x'.repeat(maxULength - 1),
+          username: 'user',
           email: 'valid@email.address',
           salt: '0'.repeat(saltLength),
-          key: '0'.repeat(keyLength),
-          type: 'administrator',
-          user_id: 1
-        } as NewUser,
-        ErrorMessage.UnknownField('user_id')
+          key: '0'.repeat(keyLength)
+        },
+        ErrorMessage.InvalidFieldValue('type', 'undefined', userTypes)
       ],
       [
         {
-          email: 'valid@email.address',
-          salt: '0'.repeat(saltLength),
-          key: '0'.repeat(keyLength),
-          blogName: 'some-blog'
-        } as NewUser,
-        ErrorMessage.InvalidFieldValue('type', undefined, userTypes)
-      ],
-      [
-        {
+          username: 'user',
           email: 'valid@email.address',
           salt: '0'.repeat(saltLength),
           key: '0'.repeat(keyLength)
         } as NewUser,
-        ErrorMessage.InvalidFieldValue('type', undefined, userTypes)
+        ErrorMessage.InvalidFieldValue('type', 'undefined', userTypes)
       ],
       [
         {
+          username: 'user',
+          email: 'valid@email.address',
+          salt: '0'.repeat(saltLength),
+          key: '0'.repeat(keyLength),
+          type: 'bad-type'
+        },
+        ErrorMessage.InvalidFieldValue('type', 'bad-type', userTypes)
+      ],
+      [
+        {
+          username: 'user',
           email: 'valid@email.address',
           salt: '0'.repeat(saltLength),
           key: '0'.repeat(keyLength),
@@ -2594,61 +2606,93 @@ describe('::createUser', () => {
           blogName: 'some-blog'
         } as unknown as NewUser,
         ErrorMessage.UnknownField('blogName')
-      ],
-      [
-        {
-          email: 'valid@email.address',
-          salt: '0'.repeat(saltLength),
-          key: '0'.repeat(keyLength),
-          type: 'blogger',
-          blogName: 'not alphanumeric'
-        } as NewUser,
-        ErrorMessage.InvalidStringLength('blogName', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          email: 'valid@email.address',
-          salt: '0'.repeat(saltLength),
-          key: '0'.repeat(keyLength),
-          type: 'blogger',
-          blogName: 'not-@lphanumeric'
-        } as NewUser,
-        ErrorMessage.InvalidStringLength('blogName', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          email: 'valid@email.address',
-          salt: '0'.repeat(saltLength),
-          key: '0'.repeat(keyLength),
-          type: 'blogger',
-          blogName: null
-        } as unknown as NewUser,
-        ErrorMessage.InvalidStringLength('blogName', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          email: 'valid@email.address',
-          salt: '0'.repeat(saltLength),
-          key: '0'.repeat(keyLength),
-          type: 'blogger',
-          blogName: 'x'.repeat(maxBLength + 1)
-        } as NewUser,
-        ErrorMessage.InvalidStringLength('blogName', 1, maxBLength, 'alphanumeric')
-      ],
-      [
-        {
-          email: 'valid@email.address',
-          salt: '0'.repeat(saltLength),
-          key: '0'.repeat(keyLength),
-          type: 'blogger',
-          blogName: ''
-        } as NewUser,
-        ErrorMessage.InvalidStringLength('blogName', 1, maxBLength, 'alphanumeric')
       ]
     ];
 
-    await expectExceptionsWithMatchingErrors(newUsers, (data) =>
-      Backend.createUser({ data, __provenance: 'fake-owner' })
+    await expectExceptionsWithMatchingErrors(
+      [
+        ...newUsers,
+        [
+          {
+            username: 'user',
+            email: 'valid@email.address',
+            salt: '0'.repeat(saltLength),
+            key: '0'.repeat(keyLength),
+            type: 'administrator',
+            fullName: 'my name'
+          } as NewUser,
+          ErrorMessage.UnknownField('fullName')
+        ],
+        [
+          {
+            username: 'user',
+            email: 'valid@email.address',
+            salt: '0'.repeat(saltLength),
+            key: '0'.repeat(keyLength),
+            type: 'administrator',
+            fullName: 5
+          } as unknown as NewUser,
+          ErrorMessage.UnknownField('fullName')
+        ],
+        [
+          {
+            username: 'user',
+            email: 'valid@email.address',
+            salt: '0'.repeat(saltLength),
+            key: '0'.repeat(keyLength),
+            type: 'administrator',
+            fullName: true
+          } as unknown as NewUser,
+          ErrorMessage.UnknownField('fullName')
+        ]
+      ],
+      (data) =>
+        Backend.createUser({ apiVersion: 1, data, __provenance: 'fake-owner' })
+    );
+
+    await expectExceptionsWithMatchingErrors(
+      [
+        ...newUsers.map(([data, error]) => {
+          return [
+            isPlainObject(data) ? { ...data, fullName: 'The Rock' } : data,
+            error
+          ] as (typeof newUsers)[number];
+        }),
+        [
+          {
+            username: 'user',
+            email: 'valid@email.address',
+            salt: '0'.repeat(saltLength),
+            key: '0'.repeat(keyLength),
+            type: 'administrator',
+            fullName: 5
+          } as unknown as NewUser,
+          ErrorMessage.InvalidStringLength(
+            'fullName',
+            1,
+            getEnv().MAX_USER_FULLNAME_LENGTH,
+            'alphanumeric (with spaces)'
+          )
+        ],
+        [
+          {
+            username: 'user',
+            email: 'valid@email.address',
+            salt: '0'.repeat(saltLength),
+            key: '0'.repeat(keyLength),
+            type: 'administrator',
+            fullName: true
+          } as unknown as NewUser,
+          ErrorMessage.InvalidStringLength(
+            'fullName',
+            1,
+            getEnv().MAX_USER_FULLNAME_LENGTH,
+            'alphanumeric (with spaces)'
+          )
+        ]
+      ],
+      (data) =>
+        Backend.createUser({ apiVersion: 2, data, __provenance: 'fake-owner' })
     );
   });
 });
@@ -2657,24 +2701,55 @@ describe('::createSession', () => {
   it('creates a new session', async () => {
     expect.hasAssertions();
 
-    const session_id = await Backend.createSession({
-      blogName: dummyAppData.users[2].blogName,
-      pageName: dummyAppData.pages[0].name,
-      __provenance: 'fake-owner'
+    const user_id = itemToStringId(dummyAppData.users[0]._id);
+    const view = 'profile';
+    const viewed_id = itemToStringId(dummyAppData.users[1]._id);
+
+    const __provenance = 'fake-owner';
+    const newSession: NewSession = {
+      user_id,
+      view,
+      viewed_id
+    };
+
+    const sessionId = await Backend.createSession({
+      apiVersion: 1,
+      __provenance,
+      data: newSession
     });
 
+    expect(sessionId).toBeInstanceOf(ObjectId);
+
     await expect(
-      (await getDb({ name: 'app' }))
-        .collection('sessions')
-        .findOne({ _id: session_id })
-    ).resolves.toStrictEqual<InternalSession>({
-      __provenance: 'fake-owner',
-      _id: expect.any(ObjectId),
-      lastRenewedDate: expect.toSatisfy(
-        (d) => new Date(d).getTime() === mockDateNowMs
-      ),
-      page_id: dummyAppData.pages[0]._id
+      (await getSessionsDb()).countDocuments({ _id: sessionId })
+    ).resolves.toBe(1);
+  });
+
+  it('creating a session is reflected in the system info', async () => {
+    expect.hasAssertions();
+
+    const __provenance = 'fake-owner';
+    const newSession: NewSession = {
+      user_id: itemToStringId(dummyAppData.users[0]._id),
+      view: 'profile',
+      viewed_id: itemToStringId(dummyAppData.users[1]._id)
+    };
+
+    await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toHaveProperty(
+      'sessions',
+      dummyActiveSessions.length
+    );
+
+    await Backend.createSession({
+      apiVersion: 1,
+      __provenance,
+      data: newSession
     });
+
+    await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toHaveProperty(
+      'sessions',
+      dummyActiveSessions.length + 1
+    );
   });
 
   it('rejects if __provenance is not a string', async () => {
@@ -2682,8 +2757,8 @@ describe('::createSession', () => {
 
     await expect(
       Backend.createSession({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name,
+        apiVersion: 1,
+        data: {},
         __provenance: undefined as unknown as string
       })
     ).rejects.toMatchObject({
@@ -2691,59 +2766,206 @@ describe('::createSession', () => {
     });
   });
 
-  it('rejects if blogName or pageName undefined or not found', async () => {
+  it('rejection results in error message crafted with respect to apiVersion', async () => {
     expect.hasAssertions();
-    const dne = 'does-not-exist';
 
     await expect(
       Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: dne,
-        pageName: dummyAppData.pages[0].name
+        apiVersion: 1,
+        data: { user_id: null, view: 'bad' },
+        __provenance: 'fake-owner'
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'blog')
+      message: expect.not.stringContaining('article')
     });
 
     await expect(
       Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dne
+        apiVersion: 2,
+        data: { user_id: null, view: 'bad' },
+        __provenance: 'fake-owner'
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'page')
+      message: expect.stringContaining('article')
     });
 
     await expect(
       Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: dummyAppData.users[2].blogName,
-        pageName: undefined
+        apiVersion: 1,
+        data: { user_id: null, view: 'article', viewed_id: null },
+        __provenance: 'fake-owner'
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('pageName', 'parameter')
+      message: expect.not.stringContaining('article')
     });
 
     await expect(
       Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: undefined,
-        pageName: dummyAppData.pages[0].name
+        apiVersion: 2,
+        data: { user_id: null, view: 'article', viewed_id: null },
+        __provenance: 'fake-owner'
+      })
+    ).resolves.toBeDefined();
+
+    await expect(
+      Backend.createSession({
+        apiVersion: 1,
+        data: { user_id: null, view: 'profile', viewed_id: 5 },
+        __provenance: 'fake-owner'
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+      message: expect.not.stringContaining('article')
     });
 
     await expect(
       Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: undefined,
-        pageName: undefined
+        apiVersion: 2,
+        data: { user_id: null, view: 'profile', viewed_id: 5 },
+        __provenance: 'fake-owner'
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+      message: expect.stringContaining('article')
     });
+
+    await expect(
+      Backend.createSession({
+        apiVersion: 1,
+        data: {
+          user_id: null,
+          view: 'admin',
+          viewed_id: itemToStringId(new ObjectId())
+        },
+        __provenance: 'fake-owner'
+      })
+    ).rejects.toMatchObject({
+      message: expect.not.stringContaining('article')
+    });
+
+    await expect(
+      Backend.createSession({
+        apiVersion: 2,
+        data: {
+          user_id: null,
+          view: 'admin',
+          viewed_id: itemToStringId(new ObjectId())
+        },
+        __provenance: 'fake-owner'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidSessionViewCombination()
+    });
+  });
+
+  it('rejects if data is invalid or contains properties that violate limits', async () => {
+    expect.hasAssertions();
+
+    const fake_id = itemToStringId(new ObjectId());
+
+    const newSessions: [
+      Parameters<typeof Backend.createSession>[0]['data'],
+      string
+    ][] = [
+      [undefined, ErrorMessage.InvalidJSON()],
+      ['string data', ErrorMessage.InvalidJSON()],
+      [{} as NewSession, ErrorMessage.InvalidFieldValue('user_id', 'undefined')],
+      [
+        { user_id: 5 } as unknown as NewSession,
+        ErrorMessage.InvalidFieldValue('user_id', '5')
+      ],
+      [
+        { user_id: true } as unknown as NewSession,
+        ErrorMessage.InvalidFieldValue('user_id', 'true')
+      ],
+      [
+        { user_id: itemToStringId(dummyAppData.users[0]._id) } as NewSession,
+        expect.stringContaining(': home, auth, admin')
+      ],
+      [
+        {
+          user_id: itemToStringId(dummyAppData.users[0]._id),
+          view: null
+        } as unknown as NewSession,
+        expect.stringContaining(': home, auth, admin')
+      ],
+      [
+        {
+          user_id: itemToStringId(dummyAppData.users[0]._id),
+          view: false
+        } as unknown as NewSession,
+        expect.stringContaining(': home, auth, admin')
+      ],
+      [
+        {
+          user_id: itemToStringId(dummyAppData.users[0]._id),
+          view: 5
+        } as unknown as NewSession,
+        expect.stringContaining(': home, auth, admin')
+      ],
+      [
+        {
+          user_id: itemToStringId(dummyAppData.users[0]._id),
+          view: 'bad'
+        } as unknown as NewSession,
+        expect.stringContaining(': home, auth, admin')
+      ],
+      [
+        { user_id: null, view: 'admin' } as NewSession,
+        expect.stringContaining(': a user_id, an opportunity_id')
+      ],
+      [
+        { user_id: null, view: 'admin', viewed_id: 5 } as unknown as NewSession,
+        expect.stringContaining(': a user_id, an opportunity_id')
+      ],
+      [
+        { user_id: null, view: 'admin', viewed_id: true } as unknown as NewSession,
+        expect.stringContaining(': a user_id, an opportunity_id')
+      ],
+      [
+        { user_id: 'bad', view: 'admin', viewed_id: null } as unknown as NewSession,
+        ErrorMessage.InvalidObjectId('bad')
+      ],
+      [
+        { user_id: null, view: 'profile', viewed_id: 'bad' } as NewSession,
+        ErrorMessage.InvalidObjectId('bad')
+      ],
+      [
+        { user_id: fake_id, view: 'admin', viewed_id: null } as NewSession,
+        ErrorMessage.ItemNotFound(fake_id, 'user')
+      ],
+      [
+        { user_id: null, view: 'profile', viewed_id: fake_id } as NewSession,
+        ErrorMessage.ItemNotFound(fake_id, 'user')
+      ],
+      [
+        { user_id: null, view: 'opportunity', viewed_id: fake_id } as NewSession,
+        ErrorMessage.ItemNotFound(fake_id, 'opportunity')
+      ],
+      [
+        {
+          user_id: null,
+          view: 'admin',
+          viewed_id: fake_id
+        } as unknown as NewSession,
+        ErrorMessage.InvalidSessionViewCombination()
+      ],
+      [
+        {
+          user_id: null,
+          view: 'admin',
+          viewed_id: null,
+          type: 'administrator'
+        } as NewSession,
+        ErrorMessage.UnknownField('type')
+      ]
+    ];
+
+    await expectExceptionsWithMatchingErrors(newSessions, (data) =>
+      Backend.createSession({ apiVersion: 1, data, __provenance: 'fake-owner' })
+    );
+
+    await expectExceptionsWithMatchingErrors(newSessions, (data) =>
+      Backend.createSession({ apiVersion: 2, data, __provenance: 'fake-owner' })
+    );
   });
 });
 
@@ -2894,7 +3116,7 @@ describe('::createOpportunity', () => {
     });
   });
 
-  it('rejects if data is invalid or contains properties that violates limits', async () => {
+  it('rejects if data is invalid or contains properties that violate limits', async () => {
     expect.hasAssertions();
     // TODO: rejects on bad/too long/too short name
     // TODO: rejects on bad/too long/too short contents
@@ -3123,7 +3345,7 @@ describe('::updateUser', () => {
     ).rejects.toMatchObject({ message: ErrorMessage.DuplicateFieldValue('email') });
   });
 
-  it('rejects if data is invalid or contains properties that violates limits', async () => {
+  it('rejects if data is invalid or contains properties that violate limits', async () => {
     expect.hasAssertions();
 
     const {
@@ -3435,7 +3657,7 @@ describe('::updateOpportunity', () => {
     });
   });
 
-  it('rejects if data is invalid or contains properties that violates limits', async () => {
+  it('rejects if data is invalid or contains properties that violate limits', async () => {
     expect.hasAssertions();
 
     const {
@@ -3831,7 +4053,7 @@ describe('::updateArticle', () => {
     });
   });
 
-  it('rejects if data is invalid or contains properties that violates limits', async () => {
+  it('rejects if data is invalid or contains properties that violate limits', async () => {
     expect.hasAssertions();
 
     const { MAX_BLOG_PAGE_CONTENTS_LENGTH_BYTES: maxCLength } = getEnv();
@@ -4011,7 +4233,7 @@ describe('::deleteSession', () => {
 
     // * Doing a wee bit of cheating here by using the getInfo() function
 
-    await expect(Backend.getInfo({ allowArticles: false })).resolves.toHaveProperty(
+    await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toHaveProperty(
       'sessions',
       dummyActiveSessions.length
     );
@@ -4020,7 +4242,7 @@ describe('::deleteSession', () => {
       Backend.deleteSession({ session_id: itemToStringId(dummyActiveSessions[0]) })
     ).resolves.toBeUndefined();
 
-    await expect(Backend.getInfo({ allowArticles: false })).resolves.toHaveProperty(
+    await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toHaveProperty(
       'sessions',
       dummyActiveSessions.length - 1
     );

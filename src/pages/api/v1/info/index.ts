@@ -13,7 +13,7 @@ export default withMiddleware(
   async (req, res) => {
     switch (req.method) {
       case 'GET': {
-        sendHttpOk(res, { info: await getInfo({ allowArticles: false }) });
+        sendHttpOk(res, { info: await getInfo({ apiVersion: 1 }) });
         break;
       }
     }

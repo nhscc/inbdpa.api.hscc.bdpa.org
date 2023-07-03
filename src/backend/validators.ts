@@ -33,8 +33,14 @@ export const usernameRegex = /^[\d_a-z-]+$/;
 export const alphanumericRegex = /^[\w-]+$/i;
 
 /**
- * Regular expression used to validate alphanumerical constraints plus the plus
- * sign (+).
+ * Regular expression used to validate alphanumerical constraints while allowing
+ * spaces.
+ */
+export const alphanumericSpaceRegex = /^[\w- ]+$/i;
+
+/**
+ * Regular expression used to validate alphanumerical constraints while allowing
+ * the plus sign (+).
  */
 export const alphanumericRegexPlus = /^[\w-+]+$/i;
 
@@ -163,7 +169,7 @@ export function validatePatchUserData(
 
   if ('views' in data && data.views !== 'increment') {
     throw new ValidationError(
-      ErrorMessage.InvalidFieldValue('views', undefined, ['increment'])
+      ErrorMessage.InvalidFieldValue('views', String(data.views), ['increment'])
     );
   }
 
@@ -199,48 +205,60 @@ export function validatePatchUserData(
  */
 export function validateNewSessionData(
   data: unknown,
-  { includeArticleInErrorMessage }: { includeArticleInErrorMessage: boolean }
+  { allowArticle }: { allowArticle: boolean }
 ): asserts data is Pick<NewSession, 'user_id' | 'view' | 'viewed_id'> {
   if (!isPlainObject(data)) {
     throw new ValidationError(ErrorMessage.InvalidJSON());
   }
 
   if (
-    data.user_id !== undefined &&
-    data.user_id !== null &&
-    typeof data.user_id !== 'string'
-  ) {
-    throw new ValidationError(ErrorMessage.InvalidFieldValue('user_id'));
-  }
-
-  if (
-    data.viewed_id !== undefined &&
-    data.viewed_id !== null &&
-    typeof data.viewed_id !== 'string'
+    data.user_id === undefined ||
+    (data.user_id !== null && typeof data.user_id !== 'string')
   ) {
     throw new ValidationError(
-      ErrorMessage.InvalidFieldValue('viewed_id', undefined, [
-        'a user_id',
-        'a opportunity_id',
-        ...(includeArticleInErrorMessage ? ['an article_id'] : [])
-      ])
+      ErrorMessage.InvalidFieldValue('user_id', String(data.user_id))
     );
   }
 
   if (
     data.view === undefined ||
     typeof data.view !== 'string' ||
-    !sessionViews.includes(data.view as SessionView)
+    !sessionViews.includes(data.view as SessionView) ||
+    (!allowArticle && data.view === 'article')
   ) {
     throw new ValidationError(
       ErrorMessage.InvalidFieldValue(
         'view',
         undefined,
-        sessionViews.filter(
-          (view) => includeArticleInErrorMessage || view !== 'article'
-        )
+        sessionViews.filter((view) => allowArticle || view !== 'article')
       )
     );
+  }
+
+  if (
+    data.viewed_id === undefined ||
+    (data.viewed_id !== null && typeof data.viewed_id !== 'string')
+  ) {
+    throw new ValidationError(
+      ErrorMessage.InvalidFieldValue('viewed_id', String(data.viewed_id), [
+        'a user_id',
+        'an opportunity_id',
+        ...(allowArticle ? ['an article_id'] : [])
+      ])
+    );
+  }
+
+  const allowedViewedIdSessionViews: SessionView[] = ['opportunity', 'profile'];
+
+  if (allowArticle) {
+    allowedViewedIdSessionViews.unshift('article');
+  }
+
+  if (
+    data.viewed_id &&
+    !allowedViewedIdSessionViews.includes(data.view as SessionView)
+  ) {
+    throw new ValidationError(ErrorMessage.InvalidSessionViewCombination());
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -283,7 +301,7 @@ export function validatePatchOpportunityData(
 
   if ('views' in data && data.views !== 'increment') {
     throw new ValidationError(
-      ErrorMessage.InvalidFieldValue('views', undefined, ['increment'])
+      ErrorMessage.InvalidFieldValue('views', String(data.views), ['increment'])
     );
   }
 
@@ -333,7 +351,7 @@ export function validatePatchArticleData(
 
   if ('views' in data && data.views !== 'increment') {
     throw new ValidationError(
-      ErrorMessage.InvalidFieldValue('views', undefined, ['increment'])
+      ErrorMessage.InvalidFieldValue('views', String(data.views), ['increment'])
     );
   }
 
@@ -421,10 +439,10 @@ function validateGenericUserData(
 
   if (
     (!isPatchData || (isPatchData && data.fullName !== undefined)) &&
-    ((!allowFullName && data.fullName !== null) ||
+    ((!allowFullName && data.fullName !== undefined) ||
       (allowFullName &&
         (typeof data.fullName !== 'string' ||
-          !alphanumericRegex.test(data.fullName) ||
+          !alphanumericSpaceRegex.test(data.fullName) ||
           data.fullName.length < 1 ||
           data.fullName.length > MAX_USER_FULLNAME_LENGTH)))
   ) {
@@ -435,7 +453,7 @@ function validateGenericUserData(
           'fullName',
           1,
           MAX_USER_FULLNAME_LENGTH,
-          'alphanumeric'
+          'alphanumeric (with spaces)'
         )
       );
     } else {
@@ -448,7 +466,7 @@ function validateGenericUserData(
     (typeof data.type !== 'string' || !userTypes.includes(data.type as UserType))
   ) {
     throw new ValidationError(
-      ErrorMessage.InvalidFieldValue('type', undefined, userTypes)
+      ErrorMessage.InvalidFieldValue('type', String(data.type), userTypes)
     );
   }
 }
@@ -558,7 +576,7 @@ function validateGenericArticleData(
         typeof keyword !== 'string' ||
         keyword.length < 1 ||
         keyword.length > MAX_ARTICLE_KEYWORD_LENGTH ||
-        alphanumericRegex.test(keyword)
+        !alphanumericRegex.test(keyword)
       ) {
         throw new ValidationError(
           ErrorMessage.InvalidArrayValue('keywords', keyword, index)

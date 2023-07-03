@@ -253,5 +253,10 @@ export function setupMemoryServerOverride(params?: {
     await server.stop({ force: true });
   });
 
-  return { reinitializeServer };
+  return {
+    /**
+     * Reset the dummy MongoDb server databases back to their initial states.
+     */
+    reinitializeServer
+  };
 }

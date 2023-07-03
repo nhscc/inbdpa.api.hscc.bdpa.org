@@ -403,10 +403,7 @@ export async function getSessionsFor(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (!viewedId || !(await itemExists<any>(xDb, viewedId))) {
-    throw new ItemNotFoundError(
-      viewed_id,
-      `${view === 'profile' ? 'user' : view}_id`
-    );
+    throw new ItemNotFoundError(viewed_id, view === 'profile' ? 'user' : view);
   }
 
   return sessionsDb
@@ -449,10 +446,7 @@ export async function getSessionsCountFor(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (!(await itemExists<any>(xDb, viewedId))) {
-    throw new ItemNotFoundError(
-      viewed_id,
-      `${view === 'profile' ? 'user' : view}_id`
-    );
+    throw new ItemNotFoundError(viewed_id, view === 'profile' ? 'user' : view);
   }
 
   return sessionsDb.countDocuments({

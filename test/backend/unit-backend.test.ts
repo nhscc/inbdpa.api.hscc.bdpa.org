@@ -1555,6 +1555,15 @@ describe('::getInfo', () => {
       })
     );
   });
+
+  it('rejects if system info is missing', async () => {
+    expect.hasAssertions();
+
+    await (await getInfoDb()).deleteMany();
+    await expect(Backend.getInfo({ allowArticles: true })).rejects.toMatchObject({
+      message: expect.stringContaining('system info is missing')
+    });
+  });
 });
 
 describe('::getArticle', () => {
@@ -1788,7 +1797,7 @@ describe('::getSessionsFor', () => {
     );
   });
 
-  it('rejects if viewed_id undefined or invalid', async () => {
+  it('rejects if viewed_id undefined, invalid, or not found', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -1807,6 +1816,35 @@ describe('::getSessionsFor', () => {
       })
     ).rejects.toMatchObject({
       message: ErrorMessage.InvalidItem('opportunity_id', 'parameter')
+    });
+
+    await expect(
+      Backend.getSessionsFor('profile', {
+        viewed_id: undefined,
+        after_id: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('user_id', 'parameter')
+    });
+
+    const viewed_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.getSessionsFor('opportunity', {
+        viewed_id,
+        after_id: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(viewed_id, 'opportunity')
+    });
+
+    await expect(
+      Backend.getSessionsFor('profile', {
+        viewed_id,
+        after_id: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(viewed_id, 'user')
     });
   });
 
@@ -1894,11 +1932,11 @@ describe('::getSessionsCountFor', () => {
     ).resolves.toBe(userSessionsCount + 1);
   });
 
-  it('rejects if viewed_id undefined or invalid', async () => {
+  it('rejects if viewed_id undefined, invalid, or not found', async () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.getSessionsCountFor('opportunity', { viewed_id: 'bad-id' })
+      Backend.getSessionsCountFor('profile', { viewed_id: 'bad-id' })
     ).rejects.toMatchObject({
       message: ErrorMessage.InvalidObjectId('bad-id')
     });
@@ -1907,6 +1945,26 @@ describe('::getSessionsCountFor', () => {
       Backend.getSessionsCountFor('opportunity', { viewed_id: undefined })
     ).rejects.toMatchObject({
       message: ErrorMessage.InvalidItem('opportunity_id', 'parameter')
+    });
+
+    await expect(
+      Backend.getSessionsCountFor('profile', { viewed_id: undefined })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('user_id', 'parameter')
+    });
+
+    const viewed_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.getSessionsCountFor('profile', { viewed_id })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(viewed_id, 'user')
+    });
+
+    await expect(
+      Backend.getSessionsCountFor('opportunity', { viewed_id })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(viewed_id, 'opportunity')
     });
   });
 });

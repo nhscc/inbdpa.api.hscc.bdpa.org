@@ -5,11 +5,13 @@ import { ObjectId } from 'mongodb';
 
 import * as Backend from 'universe/backend';
 import { getEnv } from 'universe/backend/env';
-import { ErrorMessage } from 'universe/error';
+import { ErrorMessage, TrialError } from 'universe/error';
 
 import {
   type InternalUser,
   type InternalSession,
+  type InternalOpportunity,
+  type InternalArticle,
   type NewUser,
   type NewSession,
   type NewOpportunity,
@@ -31,16 +33,15 @@ import {
   makeSessionQueryTtlFilter,
   getUsersDb,
   getSessionsDb,
-  InternalOpportunity,
   getOpportunitiesDb,
-  InternalArticle,
-  getArticlesDb
+  getArticlesDb,
+  getInfoDb,
+  UserId
 } from 'universe/backend/db';
 
 import { mockDateNowMs, useMockDateNow } from 'multiverse/mongo-common';
-import { getDb } from 'multiverse/mongo-schema';
 import { setupMemoryServerOverride } from 'multiverse/mongo-test';
-import { IdItem, itemToObjectId, itemToStringId } from 'multiverse/mongo-item';
+import { type IdItem, itemToObjectId, itemToStringId } from 'multiverse/mongo-item';
 import { expectExceptionsWithMatchingErrors } from 'multiverse/jest-expect-matching-errors';
 
 import { mockEnvFactory } from 'testverse/setup';
@@ -51,6 +52,7 @@ import {
   updatedAtLowValue,
   updatedAtMidValue
 } from 'testverse/db';
+import { toss } from 'toss-expression';
 
 setupMemoryServerOverride();
 useMockDateNow();
@@ -143,7 +145,7 @@ describe('::getAllUsers', () => {
       })
     ).resolves.not.toStrictEqual([]);
 
-    await (await getDb({ name: 'app' })).collection('users').deleteMany({});
+    await (await getUsersDb()).deleteMany({});
 
     await expect(
       Backend.getAllUsers({
@@ -371,7 +373,7 @@ describe('::getAllUsers', () => {
     );
   });
 
-  it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
+  it('rejects if after_id is invalid (undefined is okay)', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -447,7 +449,7 @@ describe('::getAllSessions', () => {
       })
     ).resolves.not.toStrictEqual([]);
 
-    await (await getDb({ name: 'app' })).collection('sessions').deleteMany({});
+    await (await getSessionsDb()).deleteMany({});
 
     await expect(
       Backend.getAllSessions({
@@ -586,7 +588,7 @@ describe('::getAllSessions', () => {
     );
   });
 
-  it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
+  it('rejects if after_id is invalid (undefined is okay)', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -704,7 +706,7 @@ describe('::getAllOpportunities', () => {
       })
     ).resolves.not.toStrictEqual([]);
 
-    await (await getDb({ name: 'app' })).collection('opportunities').deleteMany({});
+    await (await getOpportunitiesDb()).deleteMany({});
 
     await expect(
       Backend.getAllOpportunities({
@@ -919,7 +921,7 @@ describe('::getAllOpportunities', () => {
     );
   });
 
-  it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
+  it('rejects if after_id is invalid (undefined is okay)', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -1036,7 +1038,7 @@ describe('::getAllArticles', () => {
       })
     ).resolves.not.toStrictEqual([]);
 
-    await (await getDb({ name: 'app' })).collection('articles').deleteMany({});
+    await (await getArticlesDb()).deleteMany({});
 
     await expect(
       Backend.getAllArticles({
@@ -1215,7 +1217,7 @@ describe('::getAllArticles', () => {
     );
   });
 
-  it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
+  it('rejects if after_id is invalid (undefined is okay)', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -1808,7 +1810,7 @@ describe('::getSessionsFor', () => {
     });
   });
 
-  it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
+  it('rejects if after_id is invalid (undefined is okay)', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -1909,6 +1911,169 @@ describe('::getSessionsCountFor', () => {
   });
 });
 
+describe('::getUserConnections', () => {
+  it("returns a user's connections", async () => {
+    expect.hasAssertions();
+
+    assert(dummyAppData.users[0].connections.length !== 0);
+    assert(dummyAppData.users[2].connections.length !== 0);
+
+    let connections = await Backend.getUserConnections({
+      user_id: itemToStringId(dummyAppData.users[0]),
+      after_id: undefined
+    });
+
+    expect(itemToStringId(connections)).toStrictEqual(
+      itemToStringId(dummyAppData.users[0].connections)
+    );
+
+    connections = await Backend.getUserConnections({
+      user_id: itemToStringId(dummyAppData.users[2]),
+      after_id: undefined
+    });
+
+    expect(itemToStringId(connections)).toStrictEqual(
+      itemToStringId(dummyAppData.users[2].connections)
+    );
+  });
+
+  it('returns empty when a user has no connections', async () => {
+    expect.hasAssertions();
+
+    assert(dummyAppData.users[1].connections.length === 0);
+
+    await expect(
+      Backend.getUserConnections({
+        user_id: itemToStringId(dummyAppData.users[1]),
+        after_id: undefined
+      })
+    ).resolves.toStrictEqual([]);
+  });
+
+  it('supports pagination', async () => {
+    expect.hasAssertions();
+
+    assert(dummyAppData.users[1].connections.length === 0);
+
+    await withMockedEnv(
+      async () => {
+        const usersDb = await getUsersDb();
+        const userId = itemToObjectId(dummyAppData.users[1]);
+        const user_id = itemToStringId(dummyAppData.users[1]);
+
+        const connections: UserId[] = Array.from({ length: 3 }).map(() => {
+          return new ObjectId();
+        });
+
+        await usersDb.updateOne({ _id: userId }, { $set: { connections } });
+
+        await usersDb.insertMany(
+          connections.map((id, index): InternalUser => {
+            return {
+              ...dummyAppData.users[0],
+              _id: id,
+              username: `fake-user-${index}`,
+              email: `fake-email-${index}`,
+              connections: []
+            };
+          })
+        );
+
+        const expectedResults = connections.map((id) => [String(id)]);
+
+        await expect(
+          Backend.getUserConnections({
+            after_id: undefined,
+            user_id
+          })
+        ).resolves.toStrictEqual(expectedResults[0]);
+
+        await expect(
+          Backend.getUserConnections({
+            after_id: itemToStringId(connections[0]),
+            user_id
+          })
+        ).resolves.toStrictEqual(expectedResults[1]);
+
+        await expect(
+          Backend.getUserConnections({
+            after_id: itemToStringId(connections[1]),
+            user_id
+          })
+        ).resolves.toStrictEqual(expectedResults[2]);
+
+        await expect(
+          Backend.getUserConnections({
+            after_id: itemToStringId(connections[2]),
+            user_id
+          })
+        ).resolves.toStrictEqual([]);
+      },
+      { RESULTS_PER_PAGE: '1' }
+    );
+  });
+
+  it('rejects if user_id undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getUserConnections({
+        user_id: undefined,
+        after_id: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('user_id', 'parameter')
+    });
+
+    await expect(
+      Backend.getUserConnections({
+        user_id: 'bad-id',
+        after_id: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('bad-id')
+    });
+
+    const user_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.getUserConnections({
+        user_id,
+        after_id: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(user_id, 'user')
+    });
+  });
+
+  it('rejects if after_id is invalid (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getUserConnections({
+        after_id: 'fake-oid',
+        user_id: itemToStringId(new ObjectId())
+      })
+    ).rejects.toMatchObject({ message: ErrorMessage.InvalidObjectId('fake-oid') });
+  });
+
+  it('rejects if after_id not found', async () => {
+    expect.hasAssertions();
+
+    const after_id = new ObjectId().toString();
+
+    await expect(
+      Backend.getUserConnections({
+        after_id,
+        user_id: after_id
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(after_id, 'after_id')
+    });
+  });
+});
+
+// TODO: creatingX is reflected in system info
 describe('::createUser', () => {
   it('creates and returns a new administrator user', async () => {
     expect.hasAssertions();
@@ -2430,8 +2595,102 @@ describe('::createUser', () => {
   });
 });
 
+describe('::createSession', () => {
+  it('creates a new session', async () => {
+    expect.hasAssertions();
+
+    const session_id = await Backend.createSession({
+      blogName: dummyAppData.users[2].blogName,
+      pageName: dummyAppData.pages[0].name,
+      __provenance: 'fake-owner'
+    });
+
+    await expect(
+      (await getDb({ name: 'app' }))
+        .collection('sessions')
+        .findOne({ _id: session_id })
+    ).resolves.toStrictEqual<InternalSession>({
+      __provenance: 'fake-owner',
+      _id: expect.any(ObjectId),
+      lastRenewedDate: expect.toSatisfy(
+        (d) => new Date(d).getTime() === mockDateNowMs
+      ),
+      page_id: dummyAppData.pages[0]._id
+    });
+  });
+
+  it('rejects if __provenance is not a string', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.createSession({
+        blogName: dummyAppData.users[2].blogName,
+        pageName: dummyAppData.pages[0].name,
+        __provenance: undefined as unknown as string
+      })
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/invalid provenance/)
+    });
+  });
+
+  it('rejects if blogName or pageName undefined or not found', async () => {
+    expect.hasAssertions();
+    const dne = 'does-not-exist';
+
+    await expect(
+      Backend.createSession({
+        __provenance: 'fake-owner',
+        blogName: dne,
+        pageName: dummyAppData.pages[0].name
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(dne, 'blog')
+    });
+
+    await expect(
+      Backend.createSession({
+        __provenance: 'fake-owner',
+        blogName: dummyAppData.users[2].blogName,
+        pageName: dne
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(dne, 'page')
+    });
+
+    await expect(
+      Backend.createSession({
+        __provenance: 'fake-owner',
+        blogName: dummyAppData.users[2].blogName,
+        pageName: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('pageName', 'parameter')
+    });
+
+    await expect(
+      Backend.createSession({
+        __provenance: 'fake-owner',
+        blogName: undefined,
+        pageName: dummyAppData.pages[0].name
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+    });
+
+    await expect(
+      Backend.createSession({
+        __provenance: 'fake-owner',
+        blogName: undefined,
+        pageName: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+    });
+  });
+});
+
 // TODO: createOpportunity/createArticle creator_id needs to be checked for existence
-describe('::createPage', () => {
+describe('::createOpportunity', () => {
   it('creates and returns a new blog page', async () => {
     expect.hasAssertions();
 
@@ -2642,100 +2901,20 @@ describe('::createPage', () => {
   });
 });
 
-describe('::createSession', () => {
-  it('creates a new session', async () => {
+describe('::createArticle', () => {
+  it('todo', () => {
     expect.hasAssertions();
-
-    const session_id = await Backend.createSession({
-      blogName: dummyAppData.users[2].blogName,
-      pageName: dummyAppData.pages[0].name,
-      __provenance: 'fake-owner'
-    });
-
-    await expect(
-      (await getDb({ name: 'app' }))
-        .collection('sessions')
-        .findOne({ _id: session_id })
-    ).resolves.toStrictEqual<InternalSession>({
-      __provenance: 'fake-owner',
-      _id: expect.any(ObjectId),
-      lastRenewedDate: expect.toSatisfy(
-        (d) => new Date(d).getTime() === mockDateNowMs
-      ),
-      page_id: dummyAppData.pages[0]._id
-    });
-  });
-
-  it('rejects if __provenance is not a string', async () => {
-    expect.hasAssertions();
-
-    await expect(
-      Backend.createSession({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name,
-        __provenance: undefined as unknown as string
-      })
-    ).rejects.toMatchObject({
-      message: expect.stringMatching(/invalid provenance/)
-    });
-  });
-
-  it('rejects if blogName or pageName undefined or not found', async () => {
-    expect.hasAssertions();
-    const dne = 'does-not-exist';
-
-    await expect(
-      Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: dne,
-        pageName: dummyAppData.pages[0].name
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'blog')
-    });
-
-    await expect(
-      Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dne
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'page')
-    });
-
-    await expect(
-      Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: dummyAppData.users[2].blogName,
-        pageName: undefined
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('pageName', 'parameter')
-    });
-
-    await expect(
-      Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: undefined,
-        pageName: dummyAppData.pages[0].name
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
-    });
-
-    await expect(
-      Backend.createSession({
-        __provenance: 'fake-owner',
-        blogName: undefined,
-        pageName: undefined
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
-    });
   });
 });
 
+// TODO: also updates updatedAt
+describe('::createUserConnection', () => {
+  it('todo', () => {
+    expect.hasAssertions();
+  });
+});
+
+// TODO: also updates updatedAt
 describe('::updateUser', () => {
   it('updates an existing user by username', async () => {
     expect.hasAssertions();
@@ -3018,7 +3197,85 @@ describe('::updateUser', () => {
   });
 });
 
-describe('::updateBlog', () => {
+describe('::renewSession', () => {
+  it('renews an existing session, preventing it from being deleted', async () => {
+    expect.hasAssertions();
+
+    const expireAfterSecondsMs = getEnv().SESSION_EXPIRE_AFTER_SECONDS * 1000;
+    const sessionsDb = await getSessionsDb();
+
+    await expect(
+      sessionsDb.countDocuments({
+        lastRenewedDate: {
+          $gt: new Date(Date.now() - expireAfterSecondsMs)
+        }
+      })
+    ).resolves.toBe(2);
+
+    jest
+      .spyOn(Date, 'now')
+      .mockImplementation(() => mockDateNowMs + expireAfterSecondsMs * 2);
+
+    await expect(
+      sessionsDb.countDocuments({
+        lastRenewedDate: {
+          $gt: new Date(Date.now() - expireAfterSecondsMs)
+        }
+      })
+    ).resolves.toBe(0);
+
+    await Backend.renewSession({
+      session_id: itemToStringId(dummyAppData.sessions[0])
+    });
+
+    await expect(
+      sessionsDb.countDocuments({
+        lastRenewedDate: {
+          $gt: new Date(Date.now() - expireAfterSecondsMs)
+        }
+      })
+    ).resolves.toBe(1);
+  });
+
+  it('rejects if session_id is undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    const sessionId = new ObjectId().toString();
+
+    await expect(
+      Backend.renewSession({
+        session_id: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('session_id', 'parameter')
+    });
+
+    await expect(Backend.renewSession({ session_id: 'bad' })).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('bad')
+    });
+
+    await expect(
+      Backend.renewSession({ session_id: sessionId })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(sessionId, 'session')
+    });
+  });
+
+  it('rejects if session_id not a valid ObjectId', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.renewSession({
+        session_id: 'not-a-valid-object-id'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('not-a-valid-object-id')
+    });
+  });
+});
+
+// TODO: also updates updatedAt
+describe('::updateOpportunity', () => {
   it('updates an existing page', async () => {
     expect.hasAssertions();
     assert(dummyAppData.users[2].blogName);
@@ -3326,7 +3583,8 @@ describe('::updateBlog', () => {
   });
 });
 
-describe('::updatePage', () => {
+// TODO: also updates updatedAt
+describe('::updateArticle', () => {
   it('updates an existing page', async () => {
     expect.hasAssertions();
     assert(dummyAppData.users[2].blogName);
@@ -3553,307 +3811,464 @@ describe('::updatePage', () => {
   });
 });
 
-describe('::renewSession', () => {
-  it('renews an existing session, preventing it from being deleted', async () => {
-    expect.hasAssertions();
-
-    const expireAfterSecondsMs = getEnv().SESSION_EXPIRE_AFTER_SECONDS * 1000;
-    const sessionsDb = (await getDb({ name: 'app' })).collection<InternalSession>(
-      'sessions'
-    );
-
-    await expect(
-      sessionsDb.countDocuments({
-        lastRenewedDate: {
-          $gt: new Date(Date.now() - expireAfterSecondsMs)
-        }
-      })
-    ).resolves.toBe(2);
-
-    jest
-      .spyOn(Date, 'now')
-      .mockImplementation(() => mockDateNowMs + expireAfterSecondsMs * 2);
-
-    await expect(
-      sessionsDb.countDocuments({
-        lastRenewedDate: {
-          $gt: new Date(Date.now() - expireAfterSecondsMs)
-        }
-      })
-    ).resolves.toBe(0);
-
-    await Backend.renewSession({
-      session_id: itemToStringId(dummyAppData.sessions[0])
-    });
-
-    await expect(
-      sessionsDb.countDocuments({
-        lastRenewedDate: {
-          $gt: new Date(Date.now() - expireAfterSecondsMs)
-        }
-      })
-    ).resolves.toBe(1);
-  });
-
-  it('rejects if session_id undefined or not found', async () => {
-    expect.hasAssertions();
-
-    const sessionId = new ObjectId().toString();
-
-    await expect(
-      Backend.renewSession({ session_id: sessionId })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(sessionId, 'session')
-    });
-
-    await expect(
-      Backend.renewSession({
-        session_id: undefined
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidObjectId(String(undefined))
-    });
-  });
-
-  it('rejects if session_id not a valid ObjectId', async () => {
-    expect.hasAssertions();
-
-    await expect(
-      Backend.renewSession({
-        session_id: 'not-a-valid-object-id'
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidObjectId('not-a-valid-object-id')
-    });
-  });
-});
-
 describe('::deleteUser', () => {
-  it('deletes a user by username', async () => {
+  it('deletes a user by user_id', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[0].username !== null);
 
-    const usersDb = (await getDb({ name: 'app' })).collection('users');
+    const usersDb = await getUsersDb();
 
     await expect(
-      usersDb.countDocuments({ _id: dummyAppData.users[0]._id })
+      usersDb.countDocuments({ _id: itemToObjectId(dummyAppData.users[0]) })
     ).resolves.toBe(1);
 
     await expect(
-      Backend.deleteUser({ usernameOrEmail: dummyAppData.users[0].username })
+      Backend.deleteUser({ user_id: itemToStringId(dummyAppData.users[0]) })
     ).resolves.toBeUndefined();
 
     await expect(
-      usersDb.countDocuments({ _id: dummyAppData.users[0]._id })
+      usersDb.countDocuments({ _id: itemToObjectId(dummyAppData.users[0]) })
     ).resolves.toBe(0);
   });
 
-  it('deletes a user by email', async () => {
+  it('deleting a user is reflected in system info', async () => {
     expect.hasAssertions();
 
-    const usersDb = (await getDb({ name: 'app' })).collection('users');
+    const infoDb = await getInfoDb();
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'users',
+      dummyAppData.users.length
+    );
 
     await expect(
-      usersDb.countDocuments({ _id: dummyAppData.users[0]._id })
-    ).resolves.toBe(1);
-
-    await expect(
-      Backend.deleteUser({ usernameOrEmail: dummyAppData.users[0].email })
+      Backend.deleteUser({ user_id: itemToStringId(dummyAppData.users[0]) })
     ).resolves.toBeUndefined();
 
-    await expect(
-      usersDb.countDocuments({ _id: dummyAppData.users[0]._id })
-    ).resolves.toBe(0);
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'users',
+      dummyAppData.users.length - 1
+    );
   });
 
-  it('deletes all associated pages when deleting a user', async () => {
+  it('deleting a user disconnects their user_id from formerly-connected users', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[2].username);
 
-    const pagesDb = (await getDb({ name: 'app' })).collection('pages');
+    const usersDb = await getUsersDb();
+    const userZeroId = itemToObjectId(dummyAppData.users[0]);
+    const userTwoId = itemToObjectId(dummyAppData.users[2]);
+
+    const { connections: connections1 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    expect(connections1.some((id) => id.equals(userTwoId))).toBeTrue();
 
     await expect(
-      pagesDb.countDocuments({ blog_id: dummyAppData.users[2]._id })
+      Backend.deleteUser({ user_id: itemToStringId(userTwoId) })
+    ).resolves.toBeUndefined();
+
+    const { connections: connections2 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    expect(connections2.some((id) => id.equals(userTwoId))).toBeFalse();
+  });
+
+  it('deletes all associated articles when deleting a user', async () => {
+    expect.hasAssertions();
+
+    const articlesDb = await getArticlesDb();
+
+    await expect(
+      articlesDb.countDocuments({ creator_id: dummyAppData.users[1]._id })
     ).resolves.toBe(2);
 
     await expect(
-      Backend.deleteUser({ usernameOrEmail: dummyAppData.users[2].username })
+      Backend.deleteUser({ user_id: itemToStringId(dummyAppData.users[1]) })
     ).resolves.toBeUndefined();
 
     await expect(
-      pagesDb.countDocuments({ blog_id: dummyAppData.users[2]._id })
+      articlesDb.countDocuments({ creator_id: dummyAppData.users[1]._id })
     ).resolves.toBe(0);
   });
 
-  it('does not error when attempting to delete user with no pages', async () => {
+  it('does not error when attempting to delete user with no articles', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[0].username);
 
-    const db = await getDb({ name: 'app' });
-
-    await expect(
-      Backend.deleteUser({ usernameOrEmail: dummyAppData.users[0].username })
-    ).resolves.toBeUndefined();
+    const usersDb = await getUsersDb();
+    const articlesDb = await getArticlesDb();
 
     await expect(
-      Backend.deleteUser({ usernameOrEmail: dummyAppData.users[3].email })
+      Backend.deleteUser({ user_id: itemToStringId(dummyAppData.users[2]) })
     ).resolves.toBeUndefined();
 
-    await expect(db.collection('users').countDocuments()).resolves.toBe(
-      dummyAppData.users.length - 2
+    await expect(usersDb.countDocuments()).resolves.toBe(
+      dummyAppData.users.length - 1
     );
 
-    await expect(db.collection('pages').countDocuments()).resolves.toBe(
-      dummyAppData.pages.length
+    await expect(articlesDb.countDocuments()).resolves.toBe(
+      dummyAppData.articles.length
     );
   });
 
-  it('rejects if the username/email undefined or not found', async () => {
+  it('rejects if the user_id is undefined, invalid, or not found', async () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.deleteUser({ usernameOrEmail: 'does-not-exist' })
+      Backend.deleteUser({ user_id: 'does-not-exist' })
     ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound('does-not-exist', 'user')
+      message: ErrorMessage.InvalidObjectId('does-not-exist')
     });
 
-    await expect(
-      Backend.deleteUser({ usernameOrEmail: undefined })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('usernameOrEmail', 'parameter')
+    await expect(Backend.deleteUser({ user_id: undefined })).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('user_id', 'parameter')
     });
 
-    await expect(
-      Backend.deleteUser({ usernameOrEmail: null as unknown as string })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('usernameOrEmail', 'parameter')
-    });
-  });
-});
-
-describe('::deletePage', () => {
-  it('deletes a blog page', async () => {
-    expect.hasAssertions();
-
-    const pagesDb = (await getDb({ name: 'app' })).collection('pages');
-
-    await expect(
-      pagesDb.countDocuments({ _id: dummyAppData.pages[0]._id })
-    ).resolves.toBe(1);
-
-    await expect(
-      Backend.deletePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name
-      })
-    ).resolves.toBeUndefined();
-
-    await expect(
-      pagesDb.countDocuments({ _id: dummyAppData.pages[0]._id })
-    ).resolves.toBe(0);
-  });
-
-  it('rejects if blogName or pageName undefined or not found', async () => {
-    expect.hasAssertions();
-    const dne = 'does-not-exist';
-
-    await expect(
-      Backend.deletePage({
-        blogName: dne,
-        pageName: dummyAppData.pages[0].name
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'blog')
-    });
-
-    await expect(
-      Backend.deletePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dne
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'page')
-    });
-
-    await expect(
-      Backend.deletePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: undefined
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('pageName', 'parameter')
-    });
-
-    await expect(
-      Backend.deletePage({
-        blogName: undefined,
-        pageName: dummyAppData.pages[0].name
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
-    });
-
-    await expect(
-      Backend.deletePage({
-        blogName: undefined,
-        pageName: undefined
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+    const user_id = itemToStringId(new ObjectId());
+    await expect(Backend.deleteUser({ user_id })).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(user_id, 'user')
     });
   });
 });
 
 describe('::deleteSession', () => {
-  it('deletes a session', async () => {
+  it('deletes a session by session_id', async () => {
     expect.hasAssertions();
 
-    const sessionsDb = (await getDb({ name: 'app' })).collection('sessions');
+    const sessionsDb = await getSessionsDb();
 
     await expect(
-      sessionsDb.countDocuments({ _id: dummyAppData.sessions[0]._id })
+      sessionsDb.countDocuments({ _id: itemToObjectId(dummyAppData.sessions[0]) })
     ).resolves.toBe(1);
 
     await expect(
-      Backend.deleteSession({
-        session_id: itemToStringId(dummyAppData.sessions[0])
+      Backend.deleteSession({ session_id: itemToStringId(dummyAppData.sessions[0]) })
+    ).resolves.toBeUndefined();
+
+    await expect(
+      sessionsDb.countDocuments({ _id: itemToObjectId(dummyAppData.sessions[0]) })
+    ).resolves.toBe(0);
+  });
+
+  it('deleting a session is reflected in system info', async () => {
+    expect.hasAssertions();
+
+    // * Doing a wee bit of cheating here by using the getInfo() function
+
+    await expect(Backend.getInfo({ allowArticles: false })).resolves.toHaveProperty(
+      'sessions',
+      dummyActiveSessions.length
+    );
+
+    await expect(
+      Backend.deleteSession({ session_id: itemToStringId(dummyActiveSessions[0]) })
+    ).resolves.toBeUndefined();
+
+    await expect(Backend.getInfo({ allowArticles: false })).resolves.toHaveProperty(
+      'sessions',
+      dummyActiveSessions.length - 1
+    );
+  });
+
+  it('rejects if the session_id is undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.deleteSession({ session_id: 'does-not-exist' })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('does-not-exist')
+    });
+
+    await expect(
+      Backend.deleteSession({ session_id: undefined })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('session_id', 'parameter')
+    });
+
+    const session_id = itemToStringId(new ObjectId());
+    await expect(Backend.deleteSession({ session_id })).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(session_id, 'session')
+    });
+  });
+});
+
+describe('::deleteOpportunity', () => {
+  it('deletes an opportunity by opportunity_id', async () => {
+    expect.hasAssertions();
+
+    const opportunitiesDb = await getOpportunitiesDb();
+
+    await expect(
+      opportunitiesDb.countDocuments({
+        _id: itemToObjectId(dummyAppData.opportunities[0])
+      })
+    ).resolves.toBe(1);
+
+    await expect(
+      Backend.deleteOpportunity({
+        opportunity_id: itemToStringId(dummyAppData.opportunities[0])
       })
     ).resolves.toBeUndefined();
 
     await expect(
-      sessionsDb.countDocuments({ _id: dummyAppData.sessions[0]._id })
+      opportunitiesDb.countDocuments({
+        _id: itemToObjectId(dummyAppData.opportunities[0])
+      })
     ).resolves.toBe(0);
   });
 
-  it('rejects if session_id undefined or not found', async () => {
+  it('deleting an opportunity is reflected in system info', async () => {
     expect.hasAssertions();
 
-    const sessionId = new ObjectId().toString();
+    const infoDb = await getInfoDb();
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'opportunities',
+      dummyAppData.opportunities.length
+    );
 
     await expect(
-      Backend.deleteSession({ session_id: sessionId })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(sessionId, 'session')
-    });
-
-    await expect(
-      Backend.deleteSession({
-        session_id: undefined
+      Backend.deleteOpportunity({
+        opportunity_id: itemToStringId(dummyAppData.opportunities[0])
       })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidObjectId(String(undefined))
-    });
+    ).resolves.toBeUndefined();
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'opportunities',
+      dummyAppData.opportunities.length - 1
+    );
   });
 
-  it('rejects if session_id not a valid ObjectId', async () => {
+  it('rejects if the opportunity_id is undefined, invalid, or not found', async () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.deleteSession({
-        session_id: 'not-a-valid-object-id'
+      Backend.deleteOpportunity({ opportunity_id: 'does-not-exist' })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('does-not-exist')
+    });
+
+    await expect(
+      Backend.deleteOpportunity({ opportunity_id: undefined })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('opportunity_id', 'parameter')
+    });
+
+    const opportunity_id = itemToStringId(new ObjectId());
+    await expect(Backend.deleteOpportunity({ opportunity_id })).rejects.toMatchObject(
+      {
+        message: ErrorMessage.ItemNotFound(opportunity_id, 'opportunity')
+      }
+    );
+  });
+});
+
+describe('::deleteArticle', () => {
+  it('deletes an article by article_id', async () => {
+    expect.hasAssertions();
+
+    const articlesDb = await getArticlesDb();
+
+    await expect(
+      articlesDb.countDocuments({
+        _id: itemToObjectId(dummyAppData.articles[0])
+      })
+    ).resolves.toBe(1);
+
+    await expect(
+      Backend.deleteArticle({
+        article_id: itemToStringId(dummyAppData.articles[0])
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(
+      articlesDb.countDocuments({
+        _id: itemToObjectId(dummyAppData.articles[0])
+      })
+    ).resolves.toBe(0);
+  });
+
+  it('deleting an article is reflected in system info', async () => {
+    expect.hasAssertions();
+
+    const infoDb = await getInfoDb();
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'articles',
+      dummyAppData.articles.length
+    );
+
+    await expect(
+      Backend.deleteArticle({
+        article_id: itemToStringId(dummyAppData.articles[0])
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'articles',
+      dummyAppData.articles.length - 1
+    );
+  });
+
+  it('rejects if the article_id is undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.deleteArticle({ article_id: 'does-not-exist' })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('does-not-exist')
+    });
+
+    await expect(
+      Backend.deleteArticle({ article_id: undefined })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('article_id', 'parameter')
+    });
+
+    const article_id = itemToStringId(new ObjectId());
+    await expect(Backend.deleteArticle({ article_id })).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(article_id, 'article')
+    });
+  });
+});
+
+describe('::deleteUserConnection', () => {
+  it('deletes a connection between two users', async () => {
+    expect.hasAssertions();
+
+    const usersDb = await getUsersDb();
+    const userZeroId = itemToObjectId(dummyAppData.users[0]);
+    const userTwoId = itemToObjectId(dummyAppData.users[2]);
+
+    const { connections: connections1 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { connections: connections2 } =
+      (await usersDb.findOne({ _id: userTwoId })) || toss(new TrialError());
+
+    expect(connections1.some((id) => id.equals(userTwoId))).toBeTrue();
+    expect(connections2.some((id) => id.equals(userZeroId))).toBeTrue();
+
+    await expect(
+      Backend.deleteUserConnection({
+        user_id: itemToStringId(userZeroId),
+        connection_id: itemToStringId(userTwoId)
+      })
+    ).resolves.toBeUndefined();
+
+    const { connections: connections3 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { connections: connections4 } =
+      (await usersDb.findOne({ _id: userTwoId })) || toss(new TrialError());
+
+    expect(connections3.some((id) => id.equals(userTwoId))).toBeFalse();
+    expect(connections4.some((id) => id.equals(userZeroId))).toBeFalse();
+  });
+
+  it("deleting a connection updates both users' updateAt property", async () => {
+    expect.hasAssertions();
+
+    const expectedUpdatedAt = mockDateNowMs + 10 ** 5;
+
+    jest.spyOn(Date, 'now').mockImplementation(() => expectedUpdatedAt);
+
+    const usersDb = await getUsersDb();
+    const userZeroId = itemToObjectId(dummyAppData.users[0]);
+    const userTwoId = itemToObjectId(dummyAppData.users[2]);
+
+    const { updatedAt: updatedAt1 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { updatedAt: updatedAt2 } =
+      (await usersDb.findOne({ _id: userTwoId })) || toss(new TrialError());
+
+    expect(updatedAt1).not.toBe(expectedUpdatedAt);
+    expect(updatedAt2).not.toBe(expectedUpdatedAt);
+
+    await expect(
+      Backend.deleteUserConnection({
+        user_id: itemToStringId(userZeroId),
+        connection_id: itemToStringId(userTwoId)
+      })
+    ).resolves.toBeUndefined();
+
+    const { updatedAt: updatedAt3 } =
+      (await usersDb.findOne({ _id: userZeroId })) || toss(new TrialError());
+
+    const { updatedAt: updatedAt4 } =
+      (await usersDb.findOne({ _id: userTwoId })) || toss(new TrialError());
+
+    expect(updatedAt3).toBe(expectedUpdatedAt);
+    expect(updatedAt4).toBe(expectedUpdatedAt);
+  });
+
+  it('rejects if user_id or connection_id are undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.deleteUserConnection({
+        user_id: 'does-not-exist',
+        connection_id: itemToStringId(dummyAppData.users[0])
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidObjectId('not-a-valid-object-id')
+      message: ErrorMessage.InvalidObjectId('does-not-exist')
+    });
+
+    await expect(
+      Backend.deleteUserConnection({
+        user_id: undefined,
+        connection_id: itemToStringId(dummyAppData.users[0])
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('user_id', 'parameter')
+    });
+
+    const user_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.deleteUserConnection({
+        user_id,
+        connection_id: itemToStringId(dummyAppData.users[0])
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(user_id, 'user')
+    });
+
+    await expect(
+      Backend.deleteUserConnection({
+        user_id: itemToStringId(dummyAppData.users[0]),
+        connection_id: 'does-not-exist'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('does-not-exist')
+    });
+
+    await expect(
+      Backend.deleteUserConnection({
+        user_id: itemToStringId(dummyAppData.users[0]),
+        connection_id: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('connection_id', 'parameter')
+    });
+
+    const connection_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.deleteUserConnection({
+        user_id: itemToStringId(dummyAppData.users[0]),
+        connection_id
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(connection_id, 'user')
+    });
+
+    await expect(
+      Backend.deleteUserConnection({
+        user_id: connection_id,
+        connection_id
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(connection_id, 'user')
     });
   });
 });
@@ -3900,8 +4315,10 @@ describe('::authAppUser', () => {
   });
 });
 
-test('system info is updated when users, opportunities, and articles are created and deleted', async () => {
+test('system info is updated when users, sessions, opportunities, and articles are successfully created and deleted', async () => {
   expect.hasAssertions();
+
+  // TODO: emphasis on success! Failed things should not alter counts!
 
   const { _id, ...expectedSystemInfo } = dummyAppData.info[0];
 
@@ -3988,6 +4405,7 @@ test('system info is updated when users, opportunities, and articles are created
   );
 });
 
-test('system info is updated when view counts on user profiles, opportunities, and articles are updated', async () => {
+test('system info is updated when view counts on user profiles, opportunities, and articles are successfully updated', async () => {
   expect.hasAssertions();
+  // TODO: emphasis on success! Failed things should not alter counts!
 });

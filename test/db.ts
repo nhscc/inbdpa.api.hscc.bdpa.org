@@ -353,7 +353,8 @@ const info: [InternalInfo] = [
   }
 ];
 
-// * The first user and the third user are connected
+// * The first user and the third user are connected.
+// ! Various tests are relying on this fact!
 users[0].connections.push(users[2]._id);
 users[2].connections.push(users[0]._id);
 

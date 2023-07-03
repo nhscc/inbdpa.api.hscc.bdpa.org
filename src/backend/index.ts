@@ -9,8 +9,7 @@ import {
   AppValidationError,
   InvalidItemError,
   ItemNotFoundError,
-  ValidationError,
-  GuruMeditationError
+  ValidationError
 } from 'universe/error';
 
 import {
@@ -51,8 +50,7 @@ import {
   getArticlesDb,
   getInfoDb,
   makeSessionQueryTtlFilter,
-  toPublicInfo,
-  InternalInfo
+  toPublicInfo
 } from 'universe/backend/db';
 
 import { itemExists, itemToObjectId } from 'multiverse/mongo-item';
@@ -464,9 +462,11 @@ export async function getSessionsCountFor(
 }
 
 export async function getUserConnections({
-  user_id
+  user_id,
+  after_id
 }: {
   user_id: string | undefined;
+  after_id: string | undefined;
 }): Promise<string[]> {
   if (!user_id) {
     throw new InvalidItemError('user_id', 'parameter');
@@ -474,11 +474,28 @@ export async function getUserConnections({
 
   const usersDb = await getUsersDb();
   const userId = itemToObjectId(user_id);
+  const afterId = after_id ? itemToObjectId(after_id) : undefined;
+
+  if (afterId && !(await itemExists(usersDb, afterId))) {
+    throw new ItemNotFoundError(after_id, 'after_id');
+  }
 
   const { connections } =
     (await usersDb.findOne<Pick<InternalUser, 'connections'>>(
       { _id: userId },
-      { projection: { connections: true } }
+      {
+        projection: {
+          connections: {
+            $slice: [
+              '$connections',
+              afterId
+                ? { $add: [{ $indexOfArray: ['$connections', afterId] }, 1] }
+                : 0,
+              getEnv().RESULTS_PER_PAGE
+            ]
+          }
+        }
+      }
     )) || toss(new ItemNotFoundError(user_id, 'user'));
 
   return connections.map((connection) => connection.toString());
@@ -698,7 +715,7 @@ export async function createUserConnection({
   const usersDb = await getUsersDb();
 
   if (!(await itemExists(usersDb, connectionId))) {
-    throw new ItemNotFoundError(connection_id, 'connection');
+    throw new ItemNotFoundError(connection_id, 'user');
   }
 
   const now = Date.now();
@@ -707,11 +724,11 @@ export async function createUserConnection({
   const [userIdResult] = await Promise.all([
     usersDb.updateOne(
       { _id: userId },
-      { $push: { connections: connectionId }, $set: { updatedAt: now } }
+      { $addToSet: { connections: connectionId }, $set: { updatedAt: now } }
     ),
     usersDb.updateOne(
       { _id: connectionId },
-      { $push: { connections: userId }, $set: { updatedAt: now } }
+      { $addToSet: { connections: userId }, $set: { updatedAt: now } }
     )
   ]);
 
@@ -919,7 +936,7 @@ export async function deleteUser({
 
   const { connections } =
     (await usersDb.findOne({ _id: userId })) ||
-    toss(new GuruMeditationError('user has gone missing'));
+    toss(new ItemNotFoundError(user_id, 'user'));
 
   // TODO: this (and code like it elsewhere) should be within a transaction
   const [deleteUsersCount] = await Promise.all([
@@ -940,9 +957,10 @@ export async function deleteUser({
     })
   ]);
 
-  if (deleteUsersCount !== 1) {
-    throw new ItemNotFoundError(user_id, 'user');
-  }
+  assert(
+    deleteUsersCount === 1,
+    `expected 1 deleted document, ${deleteUsersCount} were deleted`
+  );
 }
 
 export async function deleteSession({
@@ -1034,6 +1052,10 @@ export async function deleteUserConnection({
   const connectionId = itemToObjectId(connection_id);
   const usersDb = await getUsersDb();
 
+  if (!(await itemExists(usersDb, connectionId))) {
+    throw new ItemNotFoundError(connectionId, 'user');
+  }
+
   // TODO: all of this together is probably better in a transaction
   const [userIdResult] = await Promise.all([
     usersDb.updateOne(
@@ -1048,10 +1070,6 @@ export async function deleteUserConnection({
 
   if (userIdResult.matchedCount !== 1) {
     throw new ItemNotFoundError(user_id, 'user');
-  }
-
-  if (userIdResult.modifiedCount !== 1) {
-    throw new ValidationError(ErrorMessage.NotConnected());
   }
 }
 

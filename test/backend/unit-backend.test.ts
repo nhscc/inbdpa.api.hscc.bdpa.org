@@ -3312,45 +3312,45 @@ describe('::createArticle', () => {
         ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
       ],
       [
-        { contents: null } as unknown as NewArticle,
+        { contents: null },
         ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
       ],
       [
-        { contents: false } as unknown as NewArticle,
+        { contents: false },
         ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
       ],
       [
-        { contents: 'x'.repeat(maxContentLength + 1) } as unknown as NewArticle,
+        { contents: 'x'.repeat(maxContentLength + 1) },
         ErrorMessage.InvalidStringLength('contents', 0, maxContentLength, 'bytes')
       ],
       [
-        { contents: 'x'.repeat(maxContentLength) } as unknown as NewArticle,
+        { contents: 'x'.repeat(maxContentLength) },
         ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
-        { contents: 'x', title: '' } as unknown as NewArticle,
+        { contents: 'x', title: '' },
         ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
-        { contents: 'x', title: 5 } as unknown as NewArticle,
+        { contents: 'x', title: 5 },
         ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
-        { contents: 'x', title: null } as unknown as NewArticle,
+        { contents: 'x', title: null },
         ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
         {
           contents: 'x',
           title: 'x'.repeat(maxTitleLength + 1)
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidStringLength('title', 1, maxTitleLength, 'string')
       ],
       [
         {
           contents: 'x',
           title: 'x'.repeat(maxTitleLength)
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidFieldValue('keywords')
       ],
       [
@@ -3358,7 +3358,7 @@ describe('::createArticle', () => {
           contents: 'x',
           title: 'x'.repeat(maxTitleLength),
           keywords: null
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidFieldValue('keywords')
       ],
       [
@@ -3366,7 +3366,7 @@ describe('::createArticle', () => {
           contents: 'x',
           title: 'x'.repeat(maxTitleLength),
           keywords: 5
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidFieldValue('keywords')
       ],
       [
@@ -3376,7 +3376,7 @@ describe('::createArticle', () => {
           keywords: Array.from({ length: maxKeywords + 1 }).map((_, index) =>
             index.toString()
           )
-        } as unknown as NewArticle,
+        },
         ErrorMessage.TooMany('keywords', maxKeywords)
       ],
       [
@@ -3386,7 +3386,7 @@ describe('::createArticle', () => {
           keywords: Array.from({ length: maxKeywords }).map((_, index) =>
             index.toString().repeat(maxKeywordLength + 1)
           )
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidArrayValue(
           'keywords',
           '0'.repeat(maxKeywordLength + 1),
@@ -3398,7 +3398,7 @@ describe('::createArticle', () => {
           contents: 'x',
           title: 'x'.repeat(maxTitleLength),
           keywords: ['ok', 'ok', 5]
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidArrayValue('keywords', '5', 2)
       ],
       [
@@ -3406,7 +3406,7 @@ describe('::createArticle', () => {
           contents: 'x',
           title: 'x'.repeat(maxTitleLength),
           keywords: ['ok', null, 'ok']
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidArrayValue('keywords', 'null', 1)
       ],
       [
@@ -3414,7 +3414,7 @@ describe('::createArticle', () => {
           contents: 'x',
           title: 'x'.repeat(maxTitleLength),
           keywords: ['ok', '', 'ok']
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidArrayValue('keywords', '', 1)
       ],
       [
@@ -3422,7 +3422,7 @@ describe('::createArticle', () => {
           contents: 'x',
           title: 'x'.repeat(maxTitleLength),
           keywords: ['not alphanumeric']
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidArrayValue('keywords', 'not alphanumeric', 0)
       ],
       [
@@ -3430,7 +3430,7 @@ describe('::createArticle', () => {
           contents: 'x',
           title: 'x'.repeat(maxTitleLength),
           keywords: []
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidFieldValue('creator_id')
       ],
       [
@@ -3439,7 +3439,7 @@ describe('::createArticle', () => {
           title: 'x'.repeat(maxTitleLength),
           creator_id: null,
           keywords: []
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidFieldValue('creator_id')
       ],
       [
@@ -3448,7 +3448,7 @@ describe('::createArticle', () => {
           title: 'x'.repeat(maxTitleLength),
           creator_id: 5,
           keywords: []
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidFieldValue('creator_id')
       ],
       [
@@ -3457,7 +3457,7 @@ describe('::createArticle', () => {
           title: 'x'.repeat(maxTitleLength),
           creator_id: 'bad',
           keywords: []
-        } as unknown as NewArticle,
+        },
         ErrorMessage.InvalidObjectId('bad')
       ],
       [
@@ -3466,7 +3466,7 @@ describe('::createArticle', () => {
           title: 'x'.repeat(maxTitleLength),
           creator_id: fake_id,
           keywords: []
-        } as unknown as NewArticle,
+        },
         ErrorMessage.ItemNotFound(fake_id, 'user')
       ],
       [

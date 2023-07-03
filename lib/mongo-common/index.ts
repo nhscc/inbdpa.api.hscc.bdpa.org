@@ -90,6 +90,27 @@ export function getCommonDummyData(additionalDummyData?: DummyData): DummyData {
 }
 
 /**
+ * Calls `new ObjectId(...)` explicitly passing {@link mockDateNowMs} as the
+ * inception time, which is the same thing that {@link ObjectId} does internally
+ * with the real `Date.now`.
+ *
+ * **This should only be used in modules with import side-effects that execute
+ * before `useMockDateNow` is called** later in downstream code. If you are
+ * unsure, you probably don't need to use this function and should just call
+ * `new ObjectId()` instead.
+ *
+ * The point of this function is to avoid race conditions when mocking parts of
+ * the {@link Date} object that _sometimes_ resulted in _later_ calls to
+ * {@link ObjectId} generating IDs that were _less_ than the IDs generated
+ * _before_ it.
+ */
+export function generateMockSensitiveObjectId() {
+  // * Adopted from ObjectId::generate function. Turns out this is the cause of
+  // * some flakiness with tests where order is determined by ObjectId.
+  return new ObjectId(Math.floor(mockDateNowMs / 1000));
+}
+
+/**
  * The shape of the well-known `root` database's collections and their test
  * data.
  */
@@ -108,21 +129,21 @@ export const dummyRootData: DummyRootData = {
   auth: [
     // ! Must maintain order or various unit tests across projects will fail !
     {
-      _id: new ObjectId(),
+      _id: generateMockSensitiveObjectId(),
       deleted: false,
       attributes: { owner: 'local developer', isGlobalAdmin: true },
       scheme: 'bearer',
       token: { bearer: DEV_BEARER_TOKEN }
     },
     {
-      _id: new ObjectId(),
+      _id: generateMockSensitiveObjectId(),
       deleted: false,
       attributes: { owner: 'dummy owner' },
       scheme: 'bearer',
       token: { bearer: DUMMY_BEARER_TOKEN }
     },
     {
-      _id: new ObjectId(),
+      _id: generateMockSensitiveObjectId(),
       deleted: false,
       attributes: { owner: 'banned dummy owner' },
       scheme: 'bearer',
@@ -130,7 +151,7 @@ export const dummyRootData: DummyRootData = {
     }
   ],
   'request-log': Array.from({ length: 22 }).map((_, ndx) => ({
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     ip: '1.2.3.4',
     header: ndx % 2 ? null : `bearer ${BANNED_BEARER_TOKEN}`,
     method: ndx % 3 ? 'GET' : 'POST',
@@ -142,10 +163,18 @@ export const dummyRootData: DummyRootData = {
   })),
   'limited-log': [
     // ! Must maintain order or various unit tests will fail
-    { _id: new ObjectId(), ip: '1.2.3.4', until: mockDateNowMs + 1000 * 60 * 15 },
-    { _id: new ObjectId(), ip: '5.6.7.8', until: mockDateNowMs + 1000 * 60 * 15 },
     {
-      _id: new ObjectId(),
+      _id: generateMockSensitiveObjectId(),
+      ip: '1.2.3.4',
+      until: mockDateNowMs + 1000 * 60 * 15
+    },
+    {
+      _id: generateMockSensitiveObjectId(),
+      ip: '5.6.7.8',
+      until: mockDateNowMs + 1000 * 60 * 15
+    },
+    {
+      _id: generateMockSensitiveObjectId(),
       header: `bearer ${BANNED_BEARER_TOKEN}`,
       until: mockDateNowMs + 1000 * 60 * 60
     }

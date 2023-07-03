@@ -50,7 +50,9 @@ import {
   getOpportunitiesDb,
   getArticlesDb,
   getInfoDb,
-  makeSessionQueryTtlFilter
+  makeSessionQueryTtlFilter,
+  toPublicInfo,
+  InternalInfo
 } from 'universe/backend/db';
 
 import { itemExists, itemToObjectId } from 'multiverse/mongo-item';
@@ -96,7 +98,7 @@ export async function getAllUsers({
   // eslint-disable-next-line unicorn/prefer-ternary
   if (apiVersion === 2) {
     return usersDb
-      .aggregate<PublicUser>([{ $match: filter }, ...publicUserAggregation])
+      .aggregate<PublicUser>([{ $match: filter }, ...publicUserAggregation()])
       .toArray();
   } else {
     return (
@@ -182,7 +184,7 @@ export async function getAllOpportunities({
     return opportunitiesDb
       .aggregate<PublicOpportunity>([
         { $match: filter },
-        ...publicOpportunityAggregation
+        ...publicOpportunityAggregation()
       ])
       .toArray();
   } else {
@@ -225,7 +227,7 @@ export async function getAllArticles({
   };
 
   return articlesDb
-    .aggregate<PublicArticle>([{ $match: filter }, ...publicArticleAggregation])
+    .aggregate<PublicArticle>([{ $match: filter }, ...publicArticleAggregation()])
     .toArray();
 }
 
@@ -257,7 +259,7 @@ export async function getUser({
   const user =
     apiVersion === 2
       ? await usersDb
-          .aggregate<PublicUser>([{ $match: filter }, ...publicUserAggregation])
+          .aggregate<PublicUser>([{ $match: filter }, ...publicUserAggregation()])
           .next()
       : await usersDb.findOne<PublicUser>(filter, {
           projection: incompletePublicUserProjection
@@ -312,7 +314,7 @@ export async function getOpportunity({
       ? await opportunitiesDb
           .aggregate<PublicOpportunity>([
             { $match: filter },
-            ...publicOpportunityAggregation
+            ...publicOpportunityAggregation()
           ])
           .next()
       : await opportunitiesDb.findOne<PublicOpportunity>(filter, {
@@ -327,33 +329,23 @@ export async function getOpportunity({
 }
 
 export async function getInfo({
-  includeArticleCount
+  allowArticles
 }: {
-  includeArticleCount: boolean;
+  allowArticles: boolean;
 }): Promise<PublicInfo> {
-  const [info, sessions] = await Promise.all([
-    (
-      await getInfoDb()
-    ).findOne<Omit<PublicInfo, 'sessions'>>(
-      {},
-      {
-        projection: {
-          _id: false,
-          ...(includeArticleCount ? {} : { articles: false })
-        }
-      }
-    ),
-    (await getSessionsDb()).countDocuments()
+  const infoDb = await getInfoDb();
+  const sessionsDb = await getSessionsDb();
+
+  const [info, activeSessionCount] = await Promise.all([
+    infoDb.findOne(),
+    sessionsDb.countDocuments(makeSessionQueryTtlFilter())
   ]);
 
   if (!info) {
     throw new AppValidationError('system info is missing');
   }
 
-  return {
-    ...info,
-    sessions
-  };
+  return toPublicInfo(info, { activeSessionCount, allowArticles });
 }
 
 export async function getArticle({
@@ -369,7 +361,7 @@ export async function getArticle({
   const article = await articlesDb
     .aggregate<PublicArticle>([
       { $match: { _id: itemToObjectId(article_id) } },
-      ...publicArticleAggregation
+      ...publicArticleAggregation()
     ])
     .next();
 
@@ -1070,12 +1062,8 @@ export async function authAppUser({
   user_id: string | undefined;
   key: string | undefined;
 }): Promise<boolean> {
-  if (!user_id) {
-    throw new InvalidItemError('user_id', 'parameter');
-  }
-
-  if (!key) {
-    throw new InvalidItemError('key', 'parameter');
+  if (!user_id || !key) {
+    return false;
   }
 
   const usersDb = await getUsersDb();

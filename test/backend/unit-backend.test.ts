@@ -28,25 +28,53 @@ import {
   toPublicInfo,
   toPublicArticle,
   userTypes,
-  makeSessionQueryTtlFilter
+  makeSessionQueryTtlFilter,
+  getUsersDb,
+  getSessionsDb,
+  InternalOpportunity,
+  getOpportunitiesDb,
+  InternalArticle,
+  getArticlesDb
 } from 'universe/backend/db';
 
 import { mockDateNowMs, useMockDateNow } from 'multiverse/mongo-common';
 import { getDb } from 'multiverse/mongo-schema';
 import { setupMemoryServerOverride } from 'multiverse/mongo-test';
-import { itemToObjectId, itemToStringId } from 'multiverse/mongo-item';
+import { IdItem, itemToObjectId, itemToStringId } from 'multiverse/mongo-item';
 import { expectExceptionsWithMatchingErrors } from 'multiverse/jest-expect-matching-errors';
 
-import { dummyAppData } from 'testverse/db';
 import { mockEnvFactory } from 'testverse/setup';
+
+import {
+  dummyAppData,
+  updatedAtHighValue,
+  updatedAtLowValue,
+  updatedAtMidValue
+} from 'testverse/db';
 
 setupMemoryServerOverride();
 useMockDateNow();
 
 const withMockedEnv = mockEnvFactory({ NODE_ENV: 'test' });
+const dummyActiveSessions = dummyAppData.sessions.filter((session) => {
+  return (
+    session.lastRenewedDate.getTime() >
+    makeSessionQueryTtlFilter(mockDateNowMs).lastRenewedDate.$gt.getTime()
+  );
+});
+
+// * If this assertion is true, then all session-returning functions in the
+// * tests below are ignoring inactive sessions properly! Yay!
+assert(dummyActiveSessions.length < dummyAppData.sessions.length);
+
+const getActiveSessionCount = <T extends ObjectId>(idItem: IdItem<T>) => {
+  return dummyActiveSessions.filter(({ viewed_id }) =>
+    viewed_id?.equals(itemToObjectId(idItem))
+  ).length;
+};
 
 describe('::getAllUsers', () => {
-  it('returns all users in order (latest first)', async () => {
+  it('returns all users in FIFO order', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -62,6 +90,45 @@ describe('::getAllUsers', () => {
           withFullName: false
         })
       )
+    );
+  });
+
+  it('returns accurate active session count', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 2,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toContainEqual(
+      toPublicUser(dummyAppData.users[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.users[0]),
+        withFullName: true
+      })
+    );
+
+    await (
+      await getSessionsDb()
+    ).insertOne({
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'profile',
+      viewed_id: dummyAppData.users[0]._id
+    });
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 2,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toContainEqual(
+      toPublicUser(dummyAppData.users[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.users[0]) + 1,
+        withFullName: true
+      })
     );
   });
 
@@ -92,33 +159,46 @@ describe('::getAllUsers', () => {
 
     await withMockedEnv(
       async () => {
-        expect([
-          await Backend.getAllUsers({
+        const expectedResults = dummyAppData.users.map((user) => [
+          toPublicUser(user, {
+            activeSessionCount: undefined,
+            withFullName: false
+          })
+        ]);
+
+        assert(expectedResults.length === 3);
+
+        await expect(
+          Backend.getAllUsers({
             apiVersion: 1,
             after_id: undefined,
             updatedAfter: undefined
-          }),
-          await Backend.getAllUsers({
+          })
+        ).resolves.toStrictEqual(expectedResults[0]);
+
+        await expect(
+          Backend.getAllUsers({
             apiVersion: 1,
             after_id: itemToStringId(dummyAppData.users[0]),
             updatedAfter: undefined
-          }),
-          await Backend.getAllUsers({
+          })
+        ).resolves.toStrictEqual(expectedResults[1]);
+
+        await expect(
+          Backend.getAllUsers({
             apiVersion: 1,
             after_id: itemToStringId(dummyAppData.users[1]),
             updatedAfter: undefined
-          }),
-          await Backend.getAllUsers({
+          })
+        ).resolves.toStrictEqual(expectedResults[2]);
+
+        await expect(
+          Backend.getAllUsers({
             apiVersion: 1,
             after_id: itemToStringId(dummyAppData.users[2]),
             updatedAfter: undefined
           })
-        ]).toStrictEqual([
-          ...dummyAppData.users.map((user) => [
-            toPublicUser(user, { activeSessionCount: undefined, withFullName: false })
-          ]),
-          []
-        ]);
+        ).resolves.toStrictEqual([]);
       },
       { RESULTS_PER_PAGE: '1' }
     );
@@ -126,15 +206,138 @@ describe('::getAllUsers', () => {
 
   it('supports updateAfter', async () => {
     expect.hasAssertions();
-    // TODO: returns empty array for current/future timestamps
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: updatedAtLowValue.toString()
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.users.map((user) =>
+        toPublicUser(user, { activeSessionCount: undefined, withFullName: false })
+      )
+    );
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: updatedAtMidValue.toString()
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.users
+        .filter((user) => user.updatedAt > updatedAtMidValue)
+        .map((user) =>
+          toPublicUser(user, { activeSessionCount: undefined, withFullName: false })
+        )
+    );
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: updatedAtHighValue.toString()
+      })
+    ).resolves.toStrictEqual([]);
+
+    const internalUser: InternalUser = {
+      ...dummyAppData.users[0],
+      _id: new ObjectId(),
+      username: 'fake',
+      email: 'fake',
+      updatedAt: updatedAtHighValue + 1
+    };
+
+    await (await getUsersDb()).insertOne(internalUser);
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: updatedAtHighValue.toString()
+      })
+    ).resolves.toStrictEqual([
+      toPublicUser(internalUser, {
+        activeSessionCount: undefined,
+        withFullName: false
+      })
+    ]);
   });
 
   it('supports updateAfter + pagination', async () => {
     expect.hasAssertions();
-    // TODO: returns empty array for current/future timestamps even if after_id exists
+
+    await withMockedEnv(
+      async () => {
+        const targetUsers = dummyAppData.users
+          .filter((user) => user.updatedAt > updatedAtMidValue)
+          .map((user) =>
+            toPublicUser(user, { activeSessionCount: undefined, withFullName: false })
+          );
+
+        const internalUser: InternalUser = {
+          ...dummyAppData.users[0],
+          _id: new ObjectId(),
+          username: 'fake',
+          email: 'fake',
+          updatedAt: updatedAtHighValue + 1
+        };
+
+        assert(targetUsers.length === 2);
+
+        await expect(
+          Backend.getAllUsers({
+            apiVersion: 1,
+            after_id: undefined,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([targetUsers[0]]);
+
+        await expect(
+          Backend.getAllUsers({
+            apiVersion: 1,
+            after_id: targetUsers[0].user_id,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([targetUsers[1]]);
+
+        await expect(
+          Backend.getAllUsers({
+            apiVersion: 1,
+            after_id: targetUsers[1].user_id,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([]);
+
+        await (await getUsersDb()).insertOne(internalUser);
+
+        await expect(
+          Backend.getAllUsers({
+            apiVersion: 1,
+            after_id: targetUsers[1].user_id,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([
+          toPublicUser(internalUser, {
+            activeSessionCount: undefined,
+            withFullName: false
+          })
+        ]);
+
+        await expect(
+          Backend.getAllUsers({
+            apiVersion: 1,
+            after_id: itemToStringId(internalUser),
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([]);
+      },
+      { RESULTS_PER_PAGE: '1' }
+    );
   });
 
-  it('adds session property to output if and only if apiVersion === 2', async () => {
+  it('adds session and fullName properties to output if and only if apiVersion === 2', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -161,12 +364,7 @@ describe('::getAllUsers', () => {
     ).resolves.toStrictEqual(
       dummyAppData.users.map((internalUser) =>
         toPublicUser(internalUser, {
-          activeSessionCount: dummyAppData.sessions.filter(
-            (session) =>
-              session.viewed_id?.equals(internalUser._id) &&
-              session.lastRenewedDate.getMilliseconds() >
-                makeSessionQueryTtlFilter().lastRenewedDate.$gt.getMilliseconds()
-          ).length,
+          activeSessionCount: getActiveSessionCount(internalUser),
           withFullName: true
         })
       )
@@ -185,20 +383,6 @@ describe('::getAllUsers', () => {
     ).rejects.toMatchObject({ message: ErrorMessage.InvalidObjectId('fake-oid') });
   });
 
-  it('rejects if updatedAfter is not a number (undefined is okay)', async () => {
-    expect.hasAssertions();
-
-    await expect(
-      Backend.getAllUsers({
-        apiVersion: 1,
-        after_id: undefined,
-        updatedAfter: 'NaN'
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('NaN', 'updatedAfter')
-    });
-  });
-
   it('rejects if after_id not found', async () => {
     expect.hasAssertions();
 
@@ -210,244 +394,1517 @@ describe('::getAllUsers', () => {
       message: ErrorMessage.ItemNotFound(after_id, 'after_id')
     });
   });
-});
 
-describe('::getBlogPagesMetadata', () => {
-  it('returns metadata for all pages belonging to a blog in order (latest first)', async () => {
+  it('rejects if updatedAfter is not a number (undefined is okay)', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[3].blogName);
 
     await expect(
-      Backend.getBlogPagesMetadata({ blogName: dummyAppData.users[3].blogName })
+      Backend.getAllUsers({ apiVersion: 1, after_id: undefined, updatedAfter: 'NaN' })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('NaN', 'updatedAfter')
+    });
+  });
+
+  it('rejects if updatedAfter is not a safe integer (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllUsers({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: (Number.MAX_SAFE_INTEGER + 1).toString()
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem(
+        (Number.MAX_SAFE_INTEGER + 1).toString(),
+        'updatedAfter'
+      )
+    });
+  });
+});
+
+describe('::getAllSessions', () => {
+  it('returns all active sessions in FIFO order', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllSessions({
+        after_id: undefined,
+        updatedAfter: undefined
+      })
     ).resolves.toStrictEqual(
-      dummyAppData.pages
-        .filter((internalPage) =>
-          internalPage.blog_id.equals(dummyAppData.users[3]._id)
-        )
-        .reverse()
-        .map((internalPage) => toPublicPage(internalPage))
+      dummyActiveSessions.map((internalSession) => toPublicSession(internalSession))
     );
   });
 
-  it('returns empty array if blog has no pages', async () => {
+  it('does not crash when database is empty', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[3].blogName);
 
     await expect(
-      (await getDb({ name: 'app' }))
-        .collection('pages')
-        .countDocuments({ blog_id: dummyAppData.users[3]._id })
-    ).resolves.toBe(0);
+      Backend.getAllSessions({
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.not.toStrictEqual([]);
+
+    await (await getDb({ name: 'app' })).collection('sessions').deleteMany({});
 
     await expect(
-      Backend.getBlogPagesMetadata({ blogName: dummyAppData.users[3].blogName })
+      Backend.getAllSessions({
+        after_id: undefined,
+        updatedAfter: undefined
+      })
     ).resolves.toStrictEqual([]);
   });
 
-  it('rejects if blogName undefined or not found', async () => {
+  it('supports pagination', async () => {
+    expect.hasAssertions();
+
+    await withMockedEnv(
+      async () => {
+        assert(dummyActiveSessions.length === 2);
+
+        await expect(
+          Backend.getAllSessions({
+            after_id: undefined,
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual([toPublicSession(dummyActiveSessions[0])]);
+
+        await expect(
+          Backend.getAllSessions({
+            after_id: itemToStringId(dummyActiveSessions[0]),
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual([toPublicSession(dummyActiveSessions[1])]);
+
+        await expect(
+          Backend.getAllSessions({
+            after_id: itemToStringId(dummyActiveSessions[1]),
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual([]);
+      },
+      { RESULTS_PER_PAGE: '1' }
+    );
+  });
+
+  it('supports updateAfter', async () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.getBlogPagesMetadata({ blogName: undefined })
+      Backend.getAllSessions({
+        after_id: undefined,
+        updatedAfter: updatedAtLowValue.toString()
+      })
+    ).resolves.toStrictEqual(
+      dummyActiveSessions.map((session) => toPublicSession(session))
+    );
+
+    await expect(
+      Backend.getAllSessions({
+        after_id: undefined,
+        updatedAfter: updatedAtMidValue.toString()
+      })
+    ).resolves.toStrictEqual(
+      dummyActiveSessions
+        .filter((session) => session.updatedAt > updatedAtMidValue)
+        .map((session) => toPublicSession(session))
+    );
+
+    await expect(
+      Backend.getAllSessions({
+        after_id: undefined,
+        updatedAfter: updatedAtHighValue.toString()
+      })
+    ).resolves.toStrictEqual([]);
+
+    const internalSession: InternalSession = {
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      updatedAt: updatedAtHighValue + 1
+    };
+
+    await (await getSessionsDb()).insertOne(internalSession);
+
+    await expect(
+      Backend.getAllSessions({
+        after_id: undefined,
+        updatedAfter: updatedAtHighValue.toString()
+      })
+    ).resolves.toStrictEqual([toPublicSession(internalSession)]);
+  });
+
+  it('supports updateAfter + pagination', async () => {
+    expect.hasAssertions();
+
+    const targetSessions = dummyActiveSessions.filter(
+      (session) => session.updatedAt > updatedAtMidValue
+    );
+
+    const internalSession: InternalSession = {
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      updatedAt: updatedAtHighValue + 1
+    };
+
+    await withMockedEnv(
+      async () => {
+        assert(targetSessions.length === 1);
+
+        await expect(
+          Backend.getAllSessions({
+            after_id: undefined,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([toPublicSession(targetSessions[0])]);
+
+        await expect(
+          Backend.getAllSessions({
+            after_id: itemToStringId(targetSessions[0]),
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([]);
+
+        await (await getSessionsDb()).insertOne(internalSession);
+
+        await expect(
+          Backend.getAllSessions({
+            after_id: itemToStringId(targetSessions[0]),
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([toPublicSession(internalSession)]);
+
+        await expect(
+          Backend.getAllSessions({
+            after_id: itemToStringId(internalSession),
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([]);
+      },
+      { RESULTS_PER_PAGE: '1' }
+    );
+  });
+
+  it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllSessions({
+        after_id: 'fake-oid',
+        updatedAfter: undefined
+      })
+    ).rejects.toMatchObject({ message: ErrorMessage.InvalidObjectId('fake-oid') });
+  });
+
+  it('rejects if after_id not found', async () => {
+    expect.hasAssertions();
+
+    const after_id = new ObjectId().toString();
+
+    await expect(
+      Backend.getAllSessions({ after_id, updatedAfter: undefined })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+      message: ErrorMessage.ItemNotFound(after_id, 'after_id')
+    });
+  });
+
+  it('rejects if updatedAfter is not a number (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllSessions({
+        after_id: undefined,
+        updatedAfter: 'NaN'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('NaN', 'updatedAfter')
+    });
+  });
+
+  it('rejects if updatedAfter is not a safe integer (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllSessions({
+        after_id: undefined,
+        updatedAfter: (Number.MAX_SAFE_INTEGER + 1).toString()
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem(
+        (Number.MAX_SAFE_INTEGER + 1).toString(),
+        'updatedAfter'
+      )
+    });
+  });
+});
+
+describe('::getAllOpportunities', () => {
+  it('returns all opportunities in FIFO order', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.opportunities.map((internalOpportunity) =>
+        toPublicOpportunity(internalOpportunity, { activeSessionCount: undefined })
+      )
+    );
+  });
+
+  it('returns accurate active session count', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 2,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toContainEqual(
+      toPublicOpportunity(dummyAppData.opportunities[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.opportunities[0])
+      })
+    );
+
+    await (
+      await getSessionsDb()
+    ).insertOne({
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'opportunity',
+      viewed_id: dummyAppData.opportunities[0]._id
     });
 
     await expect(
-      Backend.getBlogPagesMetadata({ blogName: 'dne-blog' })
+      Backend.getAllOpportunities({
+        apiVersion: 2,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toContainEqual(
+      toPublicOpportunity(dummyAppData.opportunities[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.opportunities[0]) + 1
+      })
+    );
+  });
+
+  it('does not crash when database is empty', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.not.toStrictEqual([]);
+
+    await (await getDb({ name: 'app' })).collection('opportunities').deleteMany({});
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual([]);
+  });
+
+  it('supports pagination', async () => {
+    expect.hasAssertions();
+
+    await withMockedEnv(
+      async () => {
+        const expectedResults = dummyAppData.opportunities.map((opportunity) => [
+          toPublicOpportunity(opportunity, { activeSessionCount: undefined })
+        ]);
+
+        assert(expectedResults.length === 3);
+
+        await expect(
+          Backend.getAllOpportunities({
+            apiVersion: 1,
+            after_id: undefined,
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual(expectedResults[0]);
+
+        await expect(
+          Backend.getAllOpportunities({
+            apiVersion: 1,
+            after_id: itemToStringId(dummyAppData.opportunities[0]),
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual(expectedResults[1]);
+
+        await expect(
+          Backend.getAllOpportunities({
+            apiVersion: 1,
+            after_id: itemToStringId(dummyAppData.opportunities[1]),
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual(expectedResults[2]);
+
+        await expect(
+          Backend.getAllOpportunities({
+            apiVersion: 1,
+            after_id: itemToStringId(dummyAppData.opportunities[2]),
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual([]);
+      },
+      { RESULTS_PER_PAGE: '1' }
+    );
+  });
+
+  it('supports updateAfter', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: updatedAtLowValue.toString()
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.opportunities.map((opportunity) =>
+        toPublicOpportunity(opportunity, { activeSessionCount: undefined })
+      )
+    );
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: updatedAtMidValue.toString()
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.opportunities
+        .filter((opportunity) => opportunity.updatedAt > updatedAtMidValue)
+        .map((opportunity) =>
+          toPublicOpportunity(opportunity, { activeSessionCount: undefined })
+        )
+    );
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: updatedAtHighValue.toString()
+      })
+    ).resolves.toStrictEqual([]);
+
+    const internalOpportunity: InternalOpportunity = {
+      ...dummyAppData.opportunities[0],
+      _id: new ObjectId(),
+      updatedAt: updatedAtHighValue + 1
+    };
+
+    await (await getOpportunitiesDb()).insertOne(internalOpportunity);
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: updatedAtHighValue.toString()
+      })
+    ).resolves.toStrictEqual([
+      toPublicOpportunity(internalOpportunity, { activeSessionCount: undefined })
+    ]);
+  });
+
+  it('supports updateAfter + pagination', async () => {
+    expect.hasAssertions();
+
+    await withMockedEnv(
+      async () => {
+        const targetOpportunities = dummyAppData.opportunities
+          .filter((opportunity) => opportunity.updatedAt > updatedAtMidValue)
+          .map((opportunity) =>
+            toPublicOpportunity(opportunity, { activeSessionCount: undefined })
+          );
+
+        const internalOpportunity: InternalOpportunity = {
+          ...dummyAppData.opportunities[0],
+          _id: new ObjectId(),
+          updatedAt: updatedAtHighValue + 1
+        };
+
+        assert(targetOpportunities.length === 2);
+
+        await expect(
+          Backend.getAllOpportunities({
+            apiVersion: 1,
+            after_id: undefined,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([targetOpportunities[0]]);
+
+        await expect(
+          Backend.getAllOpportunities({
+            apiVersion: 1,
+            after_id: targetOpportunities[0].opportunity_id,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([targetOpportunities[1]]);
+
+        await expect(
+          Backend.getAllOpportunities({
+            apiVersion: 1,
+            after_id: targetOpportunities[1].opportunity_id,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([]);
+
+        await (await getOpportunitiesDb()).insertOne(internalOpportunity);
+
+        await expect(
+          Backend.getAllOpportunities({
+            apiVersion: 1,
+            after_id: targetOpportunities[1].opportunity_id,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([
+          toPublicOpportunity(internalOpportunity, {
+            activeSessionCount: undefined
+          })
+        ]);
+
+        await expect(
+          Backend.getAllOpportunities({
+            apiVersion: 1,
+            after_id: itemToStringId(internalOpportunity),
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([]);
+      },
+      { RESULTS_PER_PAGE: '1' }
+    );
+  });
+
+  it('adds session property to output if and only if apiVersion === 2', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.opportunities.map((internalOpportunity) =>
+        toPublicOpportunity(internalOpportunity, {
+          activeSessionCount: undefined
+        })
+      )
+    );
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 2,
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.opportunities.map((internalOpportunity) =>
+        toPublicOpportunity(internalOpportunity, {
+          activeSessionCount: getActiveSessionCount(internalOpportunity)
+        })
+      )
+    );
+  });
+
+  it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: 'fake-oid',
+        updatedAfter: undefined
+      })
+    ).rejects.toMatchObject({ message: ErrorMessage.InvalidObjectId('fake-oid') });
+  });
+
+  it('rejects if after_id not found', async () => {
+    expect.hasAssertions();
+
+    const after_id = new ObjectId().toString();
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id,
+        updatedAfter: undefined
+      })
     ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound('dne-blog', 'blog')
+      message: ErrorMessage.ItemNotFound(after_id, 'after_id')
+    });
+  });
+
+  it('rejects if updatedAfter is not a number (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: 'NaN'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('NaN', 'updatedAfter')
+    });
+  });
+
+  it('rejects if updatedAfter is not a safe integer (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllOpportunities({
+        apiVersion: 1,
+        after_id: undefined,
+        updatedAfter: (Number.MAX_SAFE_INTEGER + 1).toString()
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem(
+        (Number.MAX_SAFE_INTEGER + 1).toString(),
+        'updatedAfter'
+      )
+    });
+  });
+});
+
+describe('::getAllArticles', () => {
+  it('returns all articles in FIFO order', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.articles.map((internalArticle) =>
+        toPublicArticle(internalArticle, {
+          activeSessionCount: getActiveSessionCount(internalArticle)
+        })
+      )
+    );
+  });
+
+  it('returns accurate active session count', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllArticles({ after_id: undefined, updatedAfter: undefined })
+    ).resolves.toContainEqual(
+      toPublicArticle(dummyAppData.articles[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.articles[0])
+      })
+    );
+
+    await (
+      await getSessionsDb()
+    ).insertOne({
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'article',
+      viewed_id: dummyAppData.articles[0]._id
+    });
+
+    await expect(
+      Backend.getAllArticles({ after_id: undefined, updatedAfter: undefined })
+    ).resolves.toContainEqual(
+      toPublicArticle(dummyAppData.articles[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.articles[0]) + 1
+      })
+    );
+  });
+
+  it('does not crash when database is empty', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.not.toStrictEqual([]);
+
+    await (await getDb({ name: 'app' })).collection('articles').deleteMany({});
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: undefined,
+        updatedAfter: undefined
+      })
+    ).resolves.toStrictEqual([]);
+  });
+
+  it('supports pagination', async () => {
+    expect.hasAssertions();
+
+    await withMockedEnv(
+      async () => {
+        const expectedResults = dummyAppData.articles.map((article) => [
+          toPublicArticle(article, {
+            activeSessionCount: getActiveSessionCount(article)
+          })
+        ]);
+
+        assert(expectedResults.length === 3);
+
+        await expect(
+          Backend.getAllArticles({
+            after_id: undefined,
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual(expectedResults[0]);
+
+        await expect(
+          Backend.getAllArticles({
+            after_id: itemToStringId(dummyAppData.articles[0]),
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual(expectedResults[1]);
+
+        await expect(
+          Backend.getAllArticles({
+            after_id: itemToStringId(dummyAppData.articles[1]),
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual(expectedResults[2]);
+
+        await expect(
+          Backend.getAllArticles({
+            after_id: itemToStringId(dummyAppData.articles[2]),
+            updatedAfter: undefined
+          })
+        ).resolves.toStrictEqual([]);
+      },
+      { RESULTS_PER_PAGE: '1' }
+    );
+  });
+
+  it('supports updateAfter', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: undefined,
+        updatedAfter: updatedAtLowValue.toString()
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.articles.map((article) =>
+        toPublicArticle(article, {
+          activeSessionCount: getActiveSessionCount(article)
+        })
+      )
+    );
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: undefined,
+        updatedAfter: updatedAtMidValue.toString()
+      })
+    ).resolves.toStrictEqual(
+      dummyAppData.articles
+        .filter((article) => article.updatedAt > updatedAtMidValue)
+        .map((article) =>
+          toPublicArticle(article, {
+            activeSessionCount: getActiveSessionCount(article)
+          })
+        )
+    );
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: undefined,
+        updatedAfter: updatedAtHighValue.toString()
+      })
+    ).resolves.toStrictEqual([]);
+
+    const internalArticle: InternalArticle = {
+      ...dummyAppData.articles[0],
+      _id: new ObjectId(),
+      updatedAt: updatedAtHighValue + 1
+    };
+
+    await (await getArticlesDb()).insertOne(internalArticle);
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: undefined,
+        updatedAfter: updatedAtHighValue.toString()
+      })
+    ).resolves.toStrictEqual([
+      toPublicArticle(internalArticle, {
+        activeSessionCount: getActiveSessionCount(internalArticle)
+      })
+    ]);
+  });
+
+  it('supports updateAfter + pagination', async () => {
+    expect.hasAssertions();
+
+    await withMockedEnv(
+      async () => {
+        const targetArticles = dummyAppData.articles
+          .filter((article) => article.updatedAt > updatedAtMidValue)
+          .map((article) =>
+            toPublicArticle(article, {
+              activeSessionCount: getActiveSessionCount(article)
+            })
+          );
+
+        const internalArticle: InternalArticle = {
+          ...dummyAppData.articles[0],
+          _id: new ObjectId(),
+          updatedAt: updatedAtHighValue + 1
+        };
+
+        assert(targetArticles.length === 2);
+
+        await expect(
+          Backend.getAllArticles({
+            after_id: undefined,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([targetArticles[0]]);
+
+        await expect(
+          Backend.getAllArticles({
+            after_id: targetArticles[0].article_id,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([targetArticles[1]]);
+
+        await expect(
+          Backend.getAllArticles({
+            after_id: targetArticles[1].article_id,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([]);
+
+        await (await getArticlesDb()).insertOne(internalArticle);
+
+        await expect(
+          Backend.getAllArticles({
+            after_id: targetArticles[1].article_id,
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([
+          toPublicArticle(internalArticle, {
+            activeSessionCount: getActiveSessionCount(internalArticle)
+          })
+        ]);
+
+        await expect(
+          Backend.getAllArticles({
+            after_id: itemToStringId(internalArticle),
+            updatedAfter: updatedAtMidValue.toString()
+          })
+        ).resolves.toStrictEqual([]);
+      },
+      { RESULTS_PER_PAGE: '1' }
+    );
+  });
+
+  it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: 'fake-oid',
+        updatedAfter: undefined
+      })
+    ).rejects.toMatchObject({ message: ErrorMessage.InvalidObjectId('fake-oid') });
+  });
+
+  it('rejects if after_id not found', async () => {
+    expect.hasAssertions();
+
+    const after_id = new ObjectId().toString();
+
+    await expect(
+      Backend.getAllArticles({
+        after_id,
+        updatedAfter: undefined
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(after_id, 'after_id')
+    });
+  });
+
+  it('rejects if updatedAfter is not a number (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: undefined,
+        updatedAfter: 'NaN'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('NaN', 'updatedAfter')
+    });
+  });
+
+  it('rejects if updatedAfter is not a safe integer (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getAllArticles({
+        after_id: undefined,
+        updatedAfter: (Number.MAX_SAFE_INTEGER + 1).toString()
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem(
+        (Number.MAX_SAFE_INTEGER + 1).toString(),
+        'updatedAfter'
+      )
     });
   });
 });
 
 describe('::getUser', () => {
-  it('returns user by username or email', async () => {
+  it('returns user by username or user_id', async () => {
     expect.hasAssertions();
 
     assert(dummyAppData.users[0].username !== null);
 
     await expect(
-      Backend.getUser({ usernameOrEmail: dummyAppData.users[0].username })
-    ).resolves.toStrictEqual(toPublicUser(dummyAppData.users[0]));
+      Backend.getUser({ apiVersion: 1, usernameOrId: dummyAppData.users[0].username })
+    ).resolves.toStrictEqual(
+      toPublicUser(dummyAppData.users[0], {
+        activeSessionCount: undefined,
+        withFullName: false
+      })
+    );
+
+    await expect(
+      Backend.getUser({
+        apiVersion: 1,
+        usernameOrId: itemToStringId(dummyAppData.users[0])
+      })
+    ).resolves.toStrictEqual(
+      toPublicUser(dummyAppData.users[0], {
+        activeSessionCount: undefined,
+        withFullName: false
+      })
+    );
   });
 
-  it('rejects if username/email undefined or not found', async () => {
+  it('returned user has session property if and only if apiVersion === 2', async () => {
     expect.hasAssertions();
-    const usernameOrEmail = 'does-not-exist';
 
-    await expect(Backend.getUser({ usernameOrEmail })).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(usernameOrEmail, 'user')
+    assert(dummyAppData.users[0].username !== null);
+
+    await expect(
+      Backend.getUser({ apiVersion: 1, usernameOrId: dummyAppData.users[0].username })
+    ).resolves.toStrictEqual(
+      toPublicUser(dummyAppData.users[0], {
+        activeSessionCount: undefined,
+        withFullName: false
+      })
+    );
+
+    await expect(
+      Backend.getUser({
+        apiVersion: 2,
+        usernameOrId: itemToStringId(dummyAppData.users[0])
+      })
+    ).resolves.toStrictEqual(
+      toPublicUser(dummyAppData.users[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.users[0]),
+        withFullName: true
+      })
+    );
+  });
+
+  it('returns accurate active session count', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getUser({
+        apiVersion: 2,
+        usernameOrId: itemToStringId(dummyAppData.users[0])
+      })
+    ).resolves.toStrictEqual(
+      toPublicUser(dummyAppData.users[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.users[0]),
+        withFullName: true
+      })
+    );
+
+    await (
+      await getSessionsDb()
+    ).insertOne({
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'profile',
+      viewed_id: dummyAppData.users[0]._id
     });
 
     await expect(
-      Backend.getUser({ usernameOrEmail: undefined })
+      Backend.getUser({
+        apiVersion: 2,
+        usernameOrId: itemToStringId(dummyAppData.users[0])
+      })
+    ).resolves.toStrictEqual(
+      toPublicUser(dummyAppData.users[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.users[0]) + 1,
+        withFullName: true
+      })
+    );
+  });
+
+  it('rejects if username/user_id undefined or not found', async () => {
+    expect.hasAssertions();
+    const usernameOrId = 'does-not-exist';
+
+    await expect(
+      Backend.getUser({ apiVersion: 1, usernameOrId: usernameOrId })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('usernameOrEmail', 'parameter')
+      message: ErrorMessage.ItemNotFound(usernameOrId, 'user')
+    });
+
+    await expect(
+      Backend.getUser({ apiVersion: 1, usernameOrId: undefined })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('usernameOrId', 'parameter')
     });
   });
 });
 
-describe('::getBlog', () => {
-  it('returns blog by blogName', async () => {
+describe('::getSession', () => {
+  it('returns active session by session_id', async () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.getBlog({ blogName: dummyAppData.users[2].blogName })
-    ).resolves.toStrictEqual(toPublicBlog(dummyAppData.users[2]));
+      Backend.getSession({
+        session_id: itemToStringId(dummyAppData.sessions[0])
+      })
+    ).resolves.toStrictEqual(toPublicSession(dummyAppData.sessions[0]));
   });
 
-  it('rejects if blogName undefined or not found', async () => {
+  it('rejects if session exists but is inactive', async () => {
     expect.hasAssertions();
-    const blogName = 'does-not-exist';
 
-    await expect(Backend.getBlog({ blogName })).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(blogName, 'blog')
+    const session_id = await (
+      await getSessionsDb()
+    )
+      .insertOne({
+        ...dummyActiveSessions[0],
+        _id: new ObjectId(),
+        lastRenewedDate: new Date(Date.now() - 10 ** 6)
+      })
+      .then(({ insertedId }) => itemToStringId(insertedId));
+
+    await expect(Backend.getSession({ session_id })).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(session_id, 'session')
+    });
+  });
+
+  it('rejects if session_id undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    await expect(Backend.getSession({ session_id: 'bad-id' })).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('bad-id')
     });
 
-    await expect(Backend.getBlog({ blogName: undefined })).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+    const session_id = new ObjectId().toString();
+
+    await expect(Backend.getSession({ session_id })).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(session_id, 'session')
     });
+
+    await expect(Backend.getSession({ session_id: undefined })).rejects.toMatchObject(
+      {
+        message: ErrorMessage.InvalidItem('session_id', 'parameter')
+      }
+    );
   });
 });
 
-describe('::getPage', () => {
-  it('returns page by blogName and pageName', async () => {
+describe('::getOpportunity', () => {
+  it('returns opportunity by opportunity_id', async () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.getPage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name
+      Backend.getOpportunity({
+        apiVersion: 1,
+        opportunity_id: itemToStringId(dummyAppData.opportunities[0])
       })
-    ).resolves.toStrictEqual(toPublicPage(dummyAppData.pages[0]));
+    ).resolves.toStrictEqual(
+      toPublicOpportunity(dummyAppData.opportunities[0], {
+        activeSessionCount: undefined
+      })
+    );
   });
 
-  it('rejects if pageName exists but belongs to different blog', async () => {
+  it('returned opportunity has session property if and only if apiVersion === 2', async () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.getPage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[1].name
+      Backend.getOpportunity({
+        apiVersion: 1,
+        opportunity_id: itemToStringId(dummyAppData.opportunities[0])
       })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dummyAppData.pages[1].name, 'page')
-    });
+    ).resolves.toStrictEqual(
+      toPublicOpportunity(dummyAppData.opportunities[0], {
+        activeSessionCount: undefined
+      })
+    );
+
+    await expect(
+      Backend.getOpportunity({
+        apiVersion: 2,
+        opportunity_id: itemToStringId(dummyAppData.opportunities[0])
+      })
+    ).resolves.toStrictEqual(
+      toPublicOpportunity(dummyAppData.opportunities[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.opportunities[0])
+      })
+    );
   });
 
-  it('rejects if blogName or pageName undefined or not found', async () => {
+  it('returns accurate active session count', async () => {
     expect.hasAssertions();
-    const dne = 'does-not-exist';
 
     await expect(
-      Backend.getPage({ blogName: dne, pageName: dummyAppData.pages[0].name })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'blog')
-    });
-
-    await expect(
-      Backend.getPage({ blogName: dummyAppData.users[2].blogName, pageName: dne })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'page')
-    });
-
-    await expect(
-      Backend.getPage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: undefined
+      Backend.getOpportunity({
+        apiVersion: 2,
+        opportunity_id: itemToStringId(dummyAppData.opportunities[0])
       })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('pageName', 'parameter')
+    ).resolves.toStrictEqual(
+      toPublicOpportunity(dummyAppData.opportunities[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.opportunities[0])
+      })
+    );
+
+    await (
+      await getSessionsDb()
+    ).insertOne({
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'opportunity',
+      viewed_id: dummyAppData.opportunities[0]._id
     });
 
     await expect(
-      Backend.getPage({ blogName: undefined, pageName: dummyAppData.pages[0].name })
+      Backend.getOpportunity({
+        apiVersion: 2,
+        opportunity_id: itemToStringId(dummyAppData.opportunities[0])
+      })
+    ).resolves.toStrictEqual(
+      toPublicOpportunity(dummyAppData.opportunities[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.opportunities[0]) + 1
+      })
+    );
+  });
+
+  it('rejects if opportunity_id undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getOpportunity({ apiVersion: 1, opportunity_id: 'bad-id' })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+      message: ErrorMessage.InvalidObjectId('bad-id')
+    });
+
+    const opportunity_id = new ObjectId().toString();
+
+    await expect(
+      Backend.getOpportunity({ apiVersion: 1, opportunity_id })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(opportunity_id, 'opportunity')
     });
 
     await expect(
-      Backend.getPage({ blogName: undefined, pageName: undefined })
+      Backend.getOpportunity({ apiVersion: 1, opportunity_id: undefined })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+      message: ErrorMessage.InvalidItem('opportunity_id', 'parameter')
     });
   });
 });
 
 describe('::getInfo', () => {
-  it('returns information about the entire system', async () => {
+  it('returns system information wrt allowArticles and only counting active sessions', async () => {
     expect.hasAssertions();
 
-    const { _id, ...info } = dummyAppData.info[0];
-    await expect(Backend.getInfo()).resolves.toStrictEqual(info);
+    const info = dummyAppData.info[0];
+
+    await expect(Backend.getInfo({ allowArticles: false })).resolves.toStrictEqual(
+      toPublicInfo(info, {
+        activeSessionCount: dummyActiveSessions.length,
+        allowArticles: false
+      })
+    );
+
+    await expect(Backend.getInfo({ allowArticles: true })).resolves.toStrictEqual(
+      toPublicInfo(info, {
+        activeSessionCount: dummyActiveSessions.length,
+        allowArticles: true
+      })
+    );
   });
 });
 
-describe('::getPageSessionsCount', () => {
-  it('returns the number of active entries associated with the blog page', async () => {
+describe('::getArticle', () => {
+  it('returns article by article_id', async () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.getPageSessionsCount({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name
+      Backend.getArticle({
+        article_id: itemToStringId(dummyAppData.articles[0])
       })
-    ).resolves.toBe(
-      dummyAppData.sessions.filter((s) => {
-        return (
-          s.page_id.equals(dummyAppData.pages[0]._id) &&
-          s.lastRenewedDate.getTime() >
-            Date.now() - getEnv().SESSION_EXPIRE_AFTER_SECONDS * 1000
-        );
-      }).length
+    ).resolves.toStrictEqual(
+      toPublicArticle(dummyAppData.articles[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.articles[0])
+      })
     );
   });
 
-  it('rejects if blogName or pageName undefined or not found', async () => {
+  it('returns accurate active session count', async () => {
     expect.hasAssertions();
-    const dne = 'does-not-exist';
 
     await expect(
-      Backend.getPageSessionsCount({
-        blogName: dne,
-        pageName: dummyAppData.pages[0].name
+      Backend.getArticle({
+        article_id: itemToStringId(dummyAppData.articles[0])
       })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'blog')
+    ).resolves.toStrictEqual(
+      toPublicArticle(dummyAppData.articles[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.articles[0])
+      })
+    );
+
+    await (
+      await getSessionsDb()
+    ).insertOne({
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'article',
+      viewed_id: dummyAppData.articles[0]._id
     });
 
     await expect(
-      Backend.getPageSessionsCount({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dne
+      Backend.getArticle({
+        article_id: itemToStringId(dummyAppData.articles[0])
+      })
+    ).resolves.toStrictEqual(
+      toPublicArticle(dummyAppData.articles[0], {
+        activeSessionCount: getActiveSessionCount(dummyAppData.articles[0]) + 1
+      })
+    );
+  });
+
+  it('rejects if article_id undefined, invalid, or not found', async () => {
+    expect.hasAssertions();
+
+    await expect(Backend.getArticle({ article_id: 'bad-id' })).rejects.toMatchObject({
+      message: ErrorMessage.InvalidObjectId('bad-id')
+    });
+
+    const article_id = new ObjectId().toString();
+
+    await expect(Backend.getArticle({ article_id })).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(article_id, 'article')
+    });
+
+    await expect(Backend.getArticle({ article_id: undefined })).rejects.toMatchObject(
+      {
+        message: ErrorMessage.InvalidItem('article_id', 'parameter')
+      }
+    );
+  });
+});
+
+describe('::getSessionsFor', () => {
+  it('returns the active sessions associated with users', async () => {
+    expect.hasAssertions();
+
+    const userId = itemToObjectId(dummyAppData.users[0]);
+    const user_id = itemToStringId(userId);
+
+    const userSessions = dummyActiveSessions
+      .filter((session) => session._id.equals(userId))
+      .map((session) => toPublicSession(session));
+
+    await expect(
+      Backend.getSessionsFor('profile', {
+        viewed_id: user_id,
+        after_id: undefined
+      })
+    ).resolves.toStrictEqual(userSessions);
+
+    const internalSession: InternalSession = {
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'profile',
+      viewed_id: dummyAppData.users[0]._id
+    };
+
+    await (await getSessionsDb()).insertOne(internalSession);
+
+    await expect(
+      Backend.getSessionsFor('profile', {
+        viewed_id: itemToStringId(dummyAppData.users[0]),
+        after_id: undefined
+      })
+    ).resolves.toStrictEqual([...userSessions, toPublicSession(internalSession)]);
+  });
+
+  it('returns the active sessions associated with opportunities', async () => {
+    expect.hasAssertions();
+
+    const opportunityId = itemToObjectId(dummyAppData.opportunities[0]);
+    const opportunity_id = itemToStringId(opportunityId);
+
+    const opportunitySessions = dummyActiveSessions
+      .filter((session) => session._id.equals(opportunityId))
+      .map((session) => toPublicSession(session));
+
+    await expect(
+      Backend.getSessionsFor('opportunity', {
+        viewed_id: opportunity_id,
+        after_id: undefined
+      })
+    ).resolves.toStrictEqual(opportunitySessions);
+
+    const internalSession: InternalSession = {
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'opportunity',
+      viewed_id: dummyAppData.opportunities[0]._id
+    };
+
+    await (await getSessionsDb()).insertOne(internalSession);
+
+    await expect(
+      Backend.getSessionsFor('opportunity', {
+        viewed_id: itemToStringId(dummyAppData.opportunities[0]),
+        after_id: undefined
+      })
+    ).resolves.toStrictEqual([
+      ...opportunitySessions,
+      toPublicSession(internalSession)
+    ]);
+  });
+
+  it('returns the active sessions associated with articles', async () => {
+    expect.hasAssertions();
+
+    const articleId = itemToObjectId(dummyAppData.articles[0]);
+    const article_id = itemToStringId(articleId);
+
+    const articleSessions = dummyActiveSessions
+      .filter((session) => session._id.equals(articleId))
+      .map((session) => toPublicSession(session));
+
+    await expect(
+      Backend.getSessionsFor('article', {
+        viewed_id: article_id,
+        after_id: undefined
+      })
+    ).resolves.toStrictEqual(articleSessions);
+
+    const internalSession: InternalSession = {
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'article',
+      viewed_id: dummyAppData.articles[0]._id
+    };
+
+    await (await getSessionsDb()).insertOne(internalSession);
+
+    await expect(
+      Backend.getSessionsFor('article', {
+        viewed_id: itemToStringId(dummyAppData.articles[0]),
+        after_id: undefined
+      })
+    ).resolves.toStrictEqual([...articleSessions, toPublicSession(internalSession)]);
+  });
+
+  it('supports pagination', async () => {
+    expect.hasAssertions();
+
+    await withMockedEnv(
+      async () => {
+        const userId = itemToObjectId(dummyAppData.users[0]);
+        const user_id = itemToStringId(dummyAppData.users[0]);
+
+        const newInternalSessions: InternalSession[] = Array.from({ length: 3 }).map(
+          () => {
+            return {
+              ...dummyActiveSessions[0],
+              _id: new ObjectId(),
+              viewed_id: userId
+            };
+          }
+        );
+
+        await (await getSessionsDb()).insertMany(newInternalSessions);
+
+        const expectedResults = newInternalSessions.map((session) => [
+          toPublicSession(session)
+        ]);
+
+        await expect(
+          Backend.getSessionsFor('profile', {
+            after_id: undefined,
+            viewed_id: user_id
+          })
+        ).resolves.toStrictEqual(expectedResults[0]);
+
+        await expect(
+          Backend.getSessionsFor('profile', {
+            after_id: itemToStringId(newInternalSessions[0]),
+            viewed_id: user_id
+          })
+        ).resolves.toStrictEqual(expectedResults[1]);
+
+        await expect(
+          Backend.getSessionsFor('profile', {
+            after_id: itemToStringId(newInternalSessions[1]),
+            viewed_id: user_id
+          })
+        ).resolves.toStrictEqual(expectedResults[2]);
+
+        await expect(
+          Backend.getSessionsFor('profile', {
+            after_id: itemToStringId(newInternalSessions[2]),
+            viewed_id: user_id
+          })
+        ).resolves.toStrictEqual([]);
+      },
+      { RESULTS_PER_PAGE: '1' }
+    );
+  });
+
+  it('rejects if viewed_id undefined or invalid', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getSessionsFor('opportunity', {
+        viewed_id: 'bad-id',
+        after_id: undefined
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'page')
+      message: ErrorMessage.InvalidObjectId('bad-id')
     });
 
     await expect(
-      Backend.getPageSessionsCount({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: undefined
+      Backend.getSessionsFor('opportunity', {
+        viewed_id: undefined,
+        after_id: undefined
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('pageName', 'parameter')
+      message: ErrorMessage.InvalidItem('opportunity_id', 'parameter')
+    });
+  });
+
+  it('rejects if after_id is not a valid ObjectId (undefined is okay)', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getSessionsFor('article', {
+        after_id: 'fake-oid',
+        viewed_id: itemToStringId(new ObjectId())
+      })
+    ).rejects.toMatchObject({ message: ErrorMessage.InvalidObjectId('fake-oid') });
+  });
+
+  it('rejects if after_id not found', async () => {
+    expect.hasAssertions();
+
+    const after_id = new ObjectId().toString();
+
+    await expect(
+      Backend.getSessionsFor('profile', {
+        after_id,
+        viewed_id: after_id
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(after_id, 'after_id')
+    });
+  });
+});
+
+describe('::getSessionsCountFor', () => {
+  it('returns the number of active sessions associated with opportunities', async () => {
+    expect.hasAssertions();
+
+    const opportunitySessionsCount = getActiveSessionCount(
+      dummyAppData.opportunities[0]
+    );
+
+    await expect(
+      Backend.getSessionsCountFor('opportunity', {
+        viewed_id: itemToStringId(dummyAppData.opportunities[0])
+      })
+    ).resolves.toBe(opportunitySessionsCount);
+
+    await (
+      await getSessionsDb()
+    ).insertOne({
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'opportunity',
+      viewed_id: dummyAppData.opportunities[0]._id
     });
 
     await expect(
-      Backend.getPageSessionsCount({
-        blogName: undefined,
-        pageName: dummyAppData.pages[0].name
+      Backend.getSessionsCountFor('opportunity', {
+        viewed_id: itemToStringId(dummyAppData.opportunities[0])
       })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+    ).resolves.toBe(opportunitySessionsCount + 1);
+  });
+
+  it('returns the number of active sessions associated with users (profiles)', async () => {
+    expect.hasAssertions();
+
+    const userSessionsCount = getActiveSessionCount(dummyAppData.users[0]);
+
+    await expect(
+      Backend.getSessionsCountFor('profile', {
+        viewed_id: itemToStringId(dummyAppData.users[0])
+      })
+    ).resolves.toBe(userSessionsCount);
+
+    await (
+      await getSessionsDb()
+    ).insertOne({
+      ...dummyActiveSessions[0],
+      _id: new ObjectId(),
+      view: 'profile',
+      viewed_id: dummyAppData.users[0]._id
     });
 
     await expect(
-      Backend.getPageSessionsCount({ blogName: undefined, pageName: undefined })
+      Backend.getSessionsCountFor('profile', {
+        viewed_id: itemToStringId(dummyAppData.users[0])
+      })
+    ).resolves.toBe(userSessionsCount + 1);
+  });
+
+  it('rejects if viewed_id undefined or invalid', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.getSessionsCountFor('opportunity', { viewed_id: 'bad-id' })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
+      message: ErrorMessage.InvalidObjectId('bad-id')
+    });
+
+    await expect(
+      Backend.getSessionsCountFor('opportunity', { viewed_id: undefined })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidItem('opportunity_id', 'parameter')
     });
   });
 });
@@ -2126,7 +3583,7 @@ describe('::renewSession', () => {
     ).resolves.toBe(0);
 
     await Backend.renewSession({
-      session_id: dummyAppData.sessions[0]._id.toString()
+      session_id: itemToStringId(dummyAppData.sessions[0])
     });
 
     await expect(
@@ -2359,7 +3816,7 @@ describe('::deleteSession', () => {
 
     await expect(
       Backend.deleteSession({
-        session_id: dummyAppData.sessions[0]._id.toString()
+        session_id: itemToStringId(dummyAppData.sessions[0])
       })
     ).resolves.toBeUndefined();
 
@@ -2407,13 +3864,16 @@ describe('::authAppUser', () => {
 
     await expect(
       Backend.authAppUser({
-        usernameOrEmail: 'user1',
+        user_id: itemToStringId(dummyAppData.users[0]),
         key: dummyAppData.users[0].key
       })
     ).resolves.toBeTrue();
 
     await expect(
-      Backend.authAppUser({ usernameOrEmail: 'user1', key: 'bad' })
+      Backend.authAppUser({
+        user_id: itemToStringId(dummyAppData.users[0]),
+        key: 'bad'
+      })
     ).resolves.toBeFalse();
   });
 
@@ -2421,19 +3881,19 @@ describe('::authAppUser', () => {
     expect.hasAssertions();
 
     await expect(
-      Backend.authAppUser({ usernameOrEmail: 'user1', key: '' })
+      Backend.authAppUser({ user_id: itemToStringId(dummyAppData.users[0]), key: '' })
     ).resolves.toBeFalse();
 
     await expect(
       Backend.authAppUser({
-        usernameOrEmail: 'user1',
+        user_id: itemToStringId(dummyAppData.users[0]),
         key: null as unknown as undefined
       })
     ).resolves.toBeFalse();
 
     await expect(
       Backend.authAppUser({
-        usernameOrEmail: 'user1',
+        user_id: itemToStringId(dummyAppData.users[0]),
         key: undefined
       })
     ).resolves.toBeFalse();

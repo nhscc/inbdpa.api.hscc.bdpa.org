@@ -359,7 +359,7 @@ export type InternalInfo = WithId<{
 /**
  * The shape of public info.
  */
-export type PublicInfo = WithoutId<InternalInfo> & {
+export type PublicInfo = Pick<InternalInfo, 'opportunities' | 'users' | 'views'> & {
   articles?: number;
   sessions: number;
 };
@@ -467,12 +467,15 @@ export function toPublicOpportunity(
  */
 export function toPublicInfo(
   internalInfo: InternalInfo,
-  sessions: number
+  {
+    activeSessionCount,
+    allowArticles
+  }: { activeSessionCount: number; allowArticles: boolean }
 ): PublicInfo {
   return {
-    articles: internalInfo.articles,
+    ...(allowArticles ? { articles: internalInfo.articles } : {}),
     opportunities: internalInfo.opportunities,
-    sessions,
+    sessions: activeSessionCount,
     users: internalInfo.users,
     views: internalInfo.views
   };
@@ -528,13 +531,12 @@ export const incompletePublicUserProjectionWithFullName = {
 } as const;
 
 /**
- * A MongoDB aggregation pipeline that transforms internal users into public
+ * Returns a MongoDB aggregation pipeline that transforms internal users into public
  * users, each including the `sessions` and `fullName` properties. Prepend a
  * `$match` stage to return only a subset of users.
  */
-export const publicUserAggregation = makeSessionCountingAggregationPipeline(
-  incompletePublicUserProjectionWithFullName
-);
+export const publicUserAggregation = () =>
+  makeSessionCountingAggregationPipeline(incompletePublicUserProjectionWithFullName);
 
 /**
  * A MongoDB cursor projection that transforms an internal session into a public
@@ -566,13 +568,12 @@ export const incompletePublicOpportunityProjection = {
 } as const;
 
 /**
- * A MongoDB aggregation pipeline that transforms internal opportunities into
+ * Returns a MongoDB aggregation pipeline that transforms internal opportunities into
  * public opportunities, each including the `sessions` property. Prepend a
  * `$match` stage to return only a subset of opportunities.
  */
-export const publicOpportunityAggregation = makeSessionCountingAggregationPipeline(
-  incompletePublicOpportunityProjection
-);
+export const publicOpportunityAggregation = () =>
+  makeSessionCountingAggregationPipeline(incompletePublicOpportunityProjection);
 
 /**
  * A MongoDB cursor projection that transforms the internal info data into a
@@ -597,18 +598,22 @@ export const incompletePublicArticleProjection = {
 } as const;
 
 /**
- * A MongoDB aggregation pipeline that transforms internal opportunities into
+ * Returns a MongoDB aggregation pipeline that transforms internal opportunities into
  * public opportunities, each including the `sessions` property. Prepend a
  * `$match` stage to return only a subset of opportunities.
  */
-export const publicArticleAggregation = makeSessionCountingAggregationPipeline(
-  incompletePublicArticleProjection
-);
+export const publicArticleAggregation = () =>
+  makeSessionCountingAggregationPipeline(incompletePublicArticleProjection);
 
-export function makeSessionQueryTtlFilter() {
+/**
+ * Returns a MongoDb query object on the `lastRenewedDate` property.
+ *
+ * Accepts a custom `epochMs` parameter that defaults to `Date.now()`.
+ */
+export function makeSessionQueryTtlFilter(epochMs = Date.now()) {
   return {
     lastRenewedDate: {
-      $gt: new Date(Date.now() - getEnv().SESSION_EXPIRE_AFTER_SECONDS * 1000)
+      $gt: new Date(epochMs - getEnv().SESSION_EXPIRE_AFTER_SECONDS * 1000)
     }
   };
 }

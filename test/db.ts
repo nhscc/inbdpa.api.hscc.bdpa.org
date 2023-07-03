@@ -1,9 +1,8 @@
-import { ObjectId } from 'mongodb';
-
 import { getEnv } from 'universe/backend/env';
 
 import {
   dummyRootData,
+  generateMockSensitiveObjectId,
   getCommonDummyData,
   mockDateNowMs
 } from 'multiverse/mongo-common';
@@ -37,12 +36,21 @@ export type DummyAppData = {
   articles: InternalArticle[];
 };
 
+// ! Tests are relying on the XValue variables remaining what they are ! \\
+
+export const createdAtHighValue = mockDateNowMs;
+export const createdAtMidValue = mockDateNowMs - 10 ** 3;
+export const createdAtLowValue = mockDateNowMs - 10 ** 5;
+export const updatedAtHighValue = mockDateNowMs + 10 ** 3;
+export const updatedAtMidValue = mockDateNowMs - 10 ** 3;
+export const updatedAtLowValue = mockDateNowMs - 10 ** 5;
+
 // ! Order matters in unit and integration tests, so APPEND ONLY ! \\
 
 const users: InternalUser[] = [
   // ? Dummy users' passwords are the same as their usernames
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     username: 'v1-user-1',
     salt: '91db41c494502f9ebb6217e4590cccc2',
@@ -58,8 +66,8 @@ const users: InternalUser[] = [
           title: 'Something Something College',
           location: 'Somewhere, USA',
           description: 'Did college stuff.',
-          startedAt: Date.now() - 10 ** 100,
-          endedAt: Date.now() - 10 ** 10
+          startedAt: mockDateNowMs - 10 ** 100,
+          endedAt: mockDateNowMs - 10 ** 10
         }
       ],
       experience: [
@@ -67,8 +75,8 @@ const users: InternalUser[] = [
           title: 'Something Something Company',
           location: 'Somewhere, USA',
           description: 'Did company stuff.',
-          startedAt: Date.now() - 10 ** 100,
-          endedAt: Date.now() - 10 ** 10
+          startedAt: mockDateNowMs - 10 ** 100,
+          endedAt: mockDateNowMs - 10 ** 10
         }
       ],
       skills: ['Something Something Skill'],
@@ -77,17 +85,17 @@ const users: InternalUser[] = [
           title: 'Something Something Place',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: Date.now() - 10 ** 100,
-          endedAt: Date.now() - 10 ** 10
+          startedAt: mockDateNowMs - 10 ** 100,
+          endedAt: mockDateNowMs - 10 ** 10
         }
       ]
     },
     views: 125,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    createdAt: createdAtLowValue,
+    updatedAt: updatedAtHighValue
   },
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     username: 'v1-user-2',
     salt: 'bfe69b665a1ae64bb7d76c32347adecb',
@@ -103,22 +111,22 @@ const users: InternalUser[] = [
           title: 'Something Something College',
           location: 'Somewhere, USA',
           description: 'Did college stuff.',
-          startedAt: Date.now() - 10 ** 100,
-          endedAt: Date.now() - 10 ** 50
+          startedAt: mockDateNowMs - 10 ** 100,
+          endedAt: mockDateNowMs - 10 ** 50
         },
         {
           title: 'Something Something Secondary College',
           location: 'Somewhere Else, USA',
           description: 'Did more college stuff.',
-          startedAt: Date.now() - 10 ** 50,
-          endedAt: Date.now() - 10 ** 25
+          startedAt: mockDateNowMs - 10 ** 50,
+          endedAt: mockDateNowMs - 10 ** 25
         },
         {
           title: 'Something Something Graduate School',
           location: 'Someplace, USA',
           description: 'Did even more college stuff.',
-          startedAt: Date.now() - 10 ** 25,
-          endedAt: Date.now() - 10 ** 5
+          startedAt: mockDateNowMs - 10 ** 25,
+          endedAt: mockDateNowMs - 10 ** 5
         }
       ],
       experience: [
@@ -126,28 +134,28 @@ const users: InternalUser[] = [
           title: 'Something Something Company',
           location: 'Somewhere, USA',
           description: 'Did company stuff.',
-          startedAt: Date.now() - 10 ** 100,
-          endedAt: Date.now() - 10 ** 10
+          startedAt: mockDateNowMs - 10 ** 100,
+          endedAt: mockDateNowMs - 10 ** 10
         },
         {
           title: 'Something Something Else Company',
           location: 'Somewhere Else, USA',
           description: 'Doing different company stuff.',
-          startedAt: Date.now() - 10 ** 50,
+          startedAt: mockDateNowMs - 10 ** 50,
           endedAt: null
         },
         {
           title: 'Third Company',
           location: 'Third Location, USA',
           description: 'Doing different company stuff.',
-          startedAt: Date.now() - 10 ** 25,
-          endedAt: Date.now() - 10 ** 5
+          startedAt: mockDateNowMs - 10 ** 25,
+          endedAt: mockDateNowMs - 10 ** 5
         },
         {
           title: 'Fourth Company',
           location: 'Fourth Location, USA',
           description: 'Doing different company stuff.',
-          startedAt: Date.now(),
+          startedAt: mockDateNowMs,
           endedAt: null
         }
       ],
@@ -166,45 +174,45 @@ const users: InternalUser[] = [
           title: 'Something Something Place 1',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: Date.now() - 10 ** 100,
-          endedAt: Date.now() - 10 ** 80
+          startedAt: mockDateNowMs - 10 ** 100,
+          endedAt: mockDateNowMs - 10 ** 80
         },
         {
           title: 'Something Something Place 2',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: Date.now() - 10 ** 80,
-          endedAt: Date.now() - 10 ** 60
+          startedAt: mockDateNowMs - 10 ** 80,
+          endedAt: mockDateNowMs - 10 ** 60
         },
         {
           title: 'Something Something Place 3',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: Date.now() - 10 ** 60,
-          endedAt: Date.now() - 10 ** 40
+          startedAt: mockDateNowMs - 10 ** 60,
+          endedAt: mockDateNowMs - 10 ** 40
         },
         {
           title: 'Something Something Place 4',
           location: 'Wakanda',
           description: 'Did volunteering stuff.',
-          startedAt: Date.now() - 10 ** 40,
-          endedAt: Date.now() - 10 ** 20
+          startedAt: mockDateNowMs - 10 ** 40,
+          endedAt: mockDateNowMs - 10 ** 20
         },
         {
           title: 'Something Something Place 5',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: Date.now() - 10 ** 20,
-          endedAt: Date.now()
+          startedAt: mockDateNowMs - 10 ** 20,
+          endedAt: mockDateNowMs
         }
       ]
     },
     views: 125_024,
-    createdAt: Date.now() - 10 ** 10,
-    updatedAt: Date.now()
+    createdAt: createdAtMidValue,
+    updatedAt: updatedAtMidValue
   },
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     username: 'v2-user-x',
     salt: '91db41c494502f9ebb6217e4590cccc2',
@@ -221,24 +229,24 @@ const users: InternalUser[] = [
       volunteering: []
     },
     views: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    createdAt: createdAtHighValue,
+    updatedAt: updatedAtHighValue
   }
 ];
 
 const sessions: InternalSession[] = [
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     lastRenewedDate: new Date(mockDateNowMs),
     user_id: null,
     view: 'auth',
     viewed_id: null,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    createdAt: createdAtLowValue,
+    updatedAt: updatedAtHighValue
   },
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     lastRenewedDate: new Date(
       mockDateNowMs - Math.floor(getEnv().SESSION_EXPIRE_AFTER_SECONDS / 2) * 1000
@@ -246,11 +254,11 @@ const sessions: InternalSession[] = [
     user_id: users[0]._id,
     view: 'home',
     viewed_id: null,
-    createdAt: Date.now() - 10 ** 3,
-    updatedAt: Date.now() - 1000
+    createdAt: createdAtMidValue,
+    updatedAt: updatedAtMidValue
   },
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     lastRenewedDate: new Date(
       mockDateNowMs - getEnv().SESSION_EXPIRE_AFTER_SECONDS * 2000
@@ -258,83 +266,83 @@ const sessions: InternalSession[] = [
     user_id: users[0]._id,
     view: 'profile',
     viewed_id: users[0]._id,
-    createdAt: Date.now() - 100,
-    updatedAt: Date.now() - 100
+    createdAt: createdAtHighValue,
+    updatedAt: updatedAtHighValue
   }
 ];
 
 const opportunities: InternalOpportunity[] = [
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     creator_id: users[0]._id,
     title: 'Opportunity #1',
     contents: 'This is the **Markdown Text** for Opportunity One.',
     views: 0,
-    createdAt: Date.now() - 1000,
-    updatedAt: Date.now()
+    createdAt: createdAtLowValue,
+    updatedAt: updatedAtHighValue
   },
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     creator_id: users[0]._id,
     title: 'Opportunity #2',
     contents: 'This is the **Markdown Text** for Opportunity Two!',
     views: 987,
-    createdAt: Date.now() - 10 ** 5,
-    updatedAt: Date.now() - 10 ** 3
+    createdAt: createdAtMidValue,
+    updatedAt: updatedAtMidValue
   },
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     creator_id: users[2]._id,
     title: 'Opportunity #3',
     contents: 'This is the **Markdown Text** for Opportunity Three!',
     views: 10 ** 7,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    createdAt: createdAtHighValue,
+    updatedAt: updatedAtHighValue
   }
 ];
 
 const articles: InternalArticle[] = [
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     creator_id: users[0]._id,
     title: 'Article #1',
     contents: 'This is the **Markdown Text** for Article One.',
     views: 0,
     keywords: [],
-    createdAt: Date.now() - 1000,
-    updatedAt: Date.now()
+    createdAt: createdAtLowValue,
+    updatedAt: updatedAtHighValue
   },
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     creator_id: users[1]._id,
     title: 'Article #2',
     contents: 'This is the **Markdown Text** for Article Two!',
     views: 789,
     keywords: ['article', 'two'],
-    createdAt: Date.now() - 10 ** 5,
-    updatedAt: Date.now() - 10 ** 3
+    createdAt: createdAtMidValue,
+    updatedAt: updatedAtMidValue
   },
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     __provenance: dummyRootData.auth[0].attributes.owner,
     creator_id: users[1]._id,
     title: 'Article #3',
     contents: 'This is the **Markdown Text** for Article Three!',
     views: 10 ** 7 - 4,
     keywords: ['article', 'three'],
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    createdAt: createdAtHighValue,
+    updatedAt: updatedAtHighValue
   }
 ];
 
 const info: [InternalInfo] = [
   {
-    _id: new ObjectId(),
+    _id: generateMockSensitiveObjectId(),
     articles: articles.length,
     opportunities: opportunities.length,
     users: users.length,

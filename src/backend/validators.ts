@@ -42,7 +42,7 @@ export const alphanumericSpaceRegex = /^[\w- ]+$/i;
  * Regular expression used to validate alphanumerical constraints while allowing
  * the plus sign (+).
  */
-export const alphanumericRegexPlus = /^[\w-+]+$/i;
+export const alphanumericPlusRegex = /^[\w-+]+$/i;
 
 /**
  * Regular expression used to validate hexadecimal constraints.
@@ -107,6 +107,10 @@ export function validatePatchUserData(
 > {
   validateGenericUserData(data, { isPatchData: true, allowFullName });
 
+  if (Object.keys(data).length === 0) {
+    throw new ValidationError(ErrorMessage.EmptyJSONBody());
+  }
+
   if ('sections' in data) {
     if (!isPlainObject(data.sections)) {
       throw new ValidationError(ErrorMessage.InvalidFieldValue('sections'));
@@ -116,15 +120,14 @@ export function validatePatchUserData(
 
     const {
       MAX_USER_ABOUT_SECTION_LENGTH_BYTES,
-      MAX_USER_ABOUT_SECTION_SKILLS,
-      MAX_USER_ABOUT_SECTION_SKILL_LENGTH
+      MAX_USER_SKILLS_SECTION_ITEMS,
+      MAX_USER_SKILLS_SECTION_ITEM_LENGTH
     } = getEnv();
 
     if (
       'about' in sections &&
       sections.about !== null &&
       (typeof sections.about !== 'string' ||
-        sections.about.length < 1 ||
         sections.about.length > MAX_USER_ABOUT_SECTION_LENGTH_BYTES)
     ) {
       throw new ValidationError(
@@ -146,9 +149,9 @@ export function validatePatchUserData(
         throw new ValidationError(ErrorMessage.InvalidFieldValue('skills'));
       }
 
-      if (sections.skills.length > MAX_USER_ABOUT_SECTION_SKILLS) {
+      if (sections.skills.length > MAX_USER_SKILLS_SECTION_ITEMS) {
         throw new ValidationError(
-          ErrorMessage.TooMany('keywords', MAX_USER_ABOUT_SECTION_SKILLS)
+          ErrorMessage.TooMany('skills', MAX_USER_SKILLS_SECTION_ITEMS)
         );
       }
 
@@ -156,8 +159,8 @@ export function validatePatchUserData(
         if (
           typeof skill !== 'string' ||
           skill.length < 1 ||
-          skill.length > MAX_USER_ABOUT_SECTION_SKILL_LENGTH ||
-          alphanumericRegexPlus.test(skill)
+          skill.length > MAX_USER_SKILLS_SECTION_ITEM_LENGTH ||
+          !alphanumericPlusRegex.test(skill)
         ) {
           throw new ValidationError(
             ErrorMessage.InvalidArrayValue('sections.skills', skill, index)
@@ -174,7 +177,7 @@ export function validatePatchUserData(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { email, fullName, key, salt, sections, views, ...rest } =
+  const { email, fullName, key, salt, sections, views, type, ...rest } =
     data as typeof data & {
       sections?: PatchUser['sections'];
       views?: PatchUser['views'];
@@ -299,6 +302,10 @@ export function validatePatchOpportunityData(
 ): asserts data is Pick<PatchOpportunity, 'contents' | 'title' | 'views'> {
   validateGenericOpportunityData(data, { isPatchData: true });
 
+  if (Object.keys(data).length === 0) {
+    throw new ValidationError(ErrorMessage.EmptyJSONBody());
+  }
+
   if ('views' in data && data.views !== 'increment') {
     throw new ValidationError(
       ErrorMessage.InvalidFieldValue('views', String(data.views), ['increment'])
@@ -348,6 +355,10 @@ export function validatePatchArticleData(
   data: unknown
 ): asserts data is Pick<PatchArticle, 'contents' | 'keywords' | 'title' | 'views'> {
   validateGenericArticleData(data, { isPatchData: true });
+
+  if (Object.keys(data).length === 0) {
+    throw new ValidationError(ErrorMessage.EmptyJSONBody());
+  }
 
   if ('views' in data && data.views !== 'increment') {
     throw new ValidationError(
@@ -652,7 +663,7 @@ function validateGenericUserSectionArray(
       ) {
         throw new ValidationError(
           ErrorMessage.InvalidNumberValue(
-            `sections${key}[${index}].startedAt`,
+            `sections.${key}[${index}].startedAt`,
             1,
             Number.MAX_SAFE_INTEGER,
             'integer'
@@ -662,13 +673,14 @@ function validateGenericUserSectionArray(
 
       if (
         !('endedAt' in item) ||
-        typeof item.endedAt !== 'number' ||
-        !Number.isSafeInteger(item.endedAt) ||
-        item.endedAt < item.startedAt
+        (item.endedAt !== null &&
+          (typeof item.endedAt !== 'number' ||
+            !Number.isSafeInteger(item.endedAt) ||
+            item.endedAt < item.startedAt))
       ) {
         throw new ValidationError(
-          ErrorMessage.InvalidStringLength(
-            `sections${key}[${index}].endedAt`,
+          ErrorMessage.InvalidNumberValue(
+            `sections.${key}[${index}].endedAt`,
             item.startedAt,
             Number.MAX_SAFE_INTEGER,
             'integer',
@@ -685,7 +697,7 @@ function validateGenericUserSectionArray(
       ) {
         throw new ValidationError(
           ErrorMessage.InvalidStringLength(
-            `sections${key}[${index}].location`,
+            `sections.${key}[${index}].location`,
             1,
             MAX_SECTION_LOCATION_LENGTH,
             'string'
@@ -701,7 +713,7 @@ function validateGenericUserSectionArray(
       ) {
         throw new ValidationError(
           ErrorMessage.InvalidStringLength(
-            `sections${key}[${index}].description`,
+            `sections.${key}[${index}].description`,
             1,
             MAX_SECTION_DESCRIPTION_LENGTH,
             'string'

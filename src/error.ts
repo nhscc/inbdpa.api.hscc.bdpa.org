@@ -74,7 +74,7 @@ export const ErrorMessage = {
         : ''
     } ${
       max
-        ? `string between ${min} and ${max} ${
+        ? `${syntax !== 'string' ? 'string ' : ''}between ${min} and ${max} ${
             syntax === 'bytes' ? 'byte' : 'character'
           }s (inclusive)`
         : `${min} ${syntax === 'bytes' ? 'byte' : 'character'} string`

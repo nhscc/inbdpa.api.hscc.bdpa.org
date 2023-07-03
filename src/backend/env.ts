@@ -25,10 +25,10 @@ export function getEnv<T extends Environment = Environment>() {
     MAX_USER_ABOUT_SECTION_LENGTH_BYTES:
       parseAsBytes(process.env.MAX_USER_ABOUT_SECTION_LENGTH_BYTES ?? '-Infinity') ||
       1024,
-    MAX_USER_ABOUT_SECTION_SKILLS:
-      Number(process.env.MAX_USER_ABOUT_SECTION_SKILLS) || 10,
-    MAX_USER_ABOUT_SECTION_SKILL_LENGTH:
-      Number(process.env.MAX_USER_ABOUT_SECTION_SKILL_LENGTH) || 30,
+    MAX_USER_SKILLS_SECTION_ITEMS:
+      Number(process.env.MAX_USER_SKILLS_SECTION_ITEMS) || 10,
+    MAX_USER_SKILLS_SECTION_ITEM_LENGTH:
+      Number(process.env.MAX_USER_SKILLS_SECTION_ITEM_LENGTH) || 30,
     MAX_USER_SECTION_ITEMS: Number(process.env.MAX_USER_SECTION_ITEMS) || 10,
     MAX_SECTION_TITLE_LENGTH: Number(process.env.MAX_SECTION_TITLE_LENGTH) || 100,
     MAX_SECTION_LOCATION_LENGTH:

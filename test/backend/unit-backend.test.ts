@@ -1278,8 +1278,6 @@ describe('::getUser', () => {
   it('returns user by username or user_id', async () => {
     expect.hasAssertions();
 
-    assert(dummyAppData.users[0].username !== null);
-
     await expect(
       Backend.getUser({ apiVersion: 1, usernameOrId: dummyAppData.users[0].username })
     ).resolves.toStrictEqual(
@@ -1304,8 +1302,6 @@ describe('::getUser', () => {
 
   it('returned user has session property if and only if apiVersion === 2', async () => {
     expect.hasAssertions();
-
-    assert(dummyAppData.users[0].username !== null);
 
     await expect(
       Backend.getUser({ apiVersion: 1, usernameOrId: dummyAppData.users[0].username })
@@ -2206,7 +2202,7 @@ describe('::createUser', () => {
     await expect((await getUsersDb()).countDocuments(newUser)).resolves.toBe(1);
   });
 
-  it('creating a user is reflected in the system info', async () => {
+  test('creating a user is reflected in the system info', async () => {
     expect.hasAssertions();
 
     const infoDb = await getInfoDb();
@@ -2254,8 +2250,6 @@ describe('::createUser', () => {
 
   it('rejects when attempting to create a user with a duplicate username or email', async () => {
     expect.hasAssertions();
-
-    assert(dummyAppData.users[0].username);
 
     await expect(
       Backend.createUser({
@@ -2356,6 +2350,28 @@ describe('::createUser', () => {
           salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
           type: 'inner',
           fullName: null
+        },
+        __provenance: 'fake-owner'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidStringLength(
+        'fullName',
+        1,
+        getEnv().MAX_USER_FULLNAME_LENGTH,
+        'alphanumeric (with spaces)'
+      )
+    });
+
+    await expect(
+      Backend.createUser({
+        apiVersion: 2,
+        data: {
+          username: 'new-user',
+          email: 'new-user@email.com',
+          key: '0'.repeat(getEnv().USER_KEY_LENGTH),
+          salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
+          type: 'inner',
+          fullName: 'x'.repeat(getEnv().MAX_USER_FULLNAME_LENGTH + 1)
         },
         __provenance: 'fake-owner'
       })
@@ -2582,15 +2598,6 @@ describe('::createUser', () => {
           username: 'user',
           email: 'valid@email.address',
           salt: '0'.repeat(saltLength),
-          key: '0'.repeat(keyLength)
-        } as NewUser,
-        ErrorMessage.InvalidFieldValue('type', 'undefined', userTypes)
-      ],
-      [
-        {
-          username: 'user',
-          email: 'valid@email.address',
-          salt: '0'.repeat(saltLength),
           key: '0'.repeat(keyLength),
           type: 'bad-type'
         },
@@ -2725,7 +2732,7 @@ describe('::createSession', () => {
     ).resolves.toBe(1);
   });
 
-  it('creating a session is reflected in the system info', async () => {
+  test('creating a session is reflected in the system info', async () => {
     expect.hasAssertions();
 
     const __provenance = 'fake-owner';
@@ -3027,7 +3034,7 @@ describe('::createOpportunity', () => {
     ).resolves.toBe(1);
   });
 
-  it('creating an opportunity is reflected in the system info', async () => {
+  test('creating an opportunity is reflected in the system info', async () => {
     expect.hasAssertions();
 
     const infoDb = await getInfoDb();
@@ -3238,7 +3245,7 @@ describe('::createArticle', () => {
     );
   });
 
-  it('creating an article is reflected in the system info', async () => {
+  test('creating an article is reflected in the system info', async () => {
     expect.hasAssertions();
 
     const infoDb = await getInfoDb();
@@ -3676,75 +3683,279 @@ describe('::createUserConnection', () => {
   });
 });
 
-// TODO: also updates updatedAt
 describe('::updateUser', () => {
-  it('updates an existing user by username', async () => {
+  it('updates an existing user', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[2].username);
-    assert(dummyAppData.users[2].type === 'blogger');
 
-    const usersDb = (await getDb({ name: 'app' })).collection('users');
-
-    const patchUser: PatchUser = {
-      email: 'fake@email.com',
-      key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-      salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-      banned: true
-    };
+    const usersDb = await getUsersDb();
+    const userId = itemToObjectId(dummyAppData.users[2]);
+    const patchUser: PatchUser = { type: 'staff' };
 
     await expect(
       usersDb.countDocuments({
-        username: dummyAppData.users[2].username,
+        _id: userId,
         ...patchUser
       })
     ).resolves.toBe(0);
 
     await expect(
       Backend.updateUser({
-        usernameOrEmail: dummyAppData.users[2].username,
+        apiVersion: 1,
+        user_id: itemToStringId(userId),
         data: patchUser
       })
     ).resolves.toBeUndefined();
 
     await expect(
       usersDb.countDocuments({
-        username: dummyAppData.users[2].username,
+        _id: userId,
         ...patchUser
       })
     ).resolves.toBe(1);
   });
 
-  it('updates an existing user by email', async () => {
+  it('applies updates to sections at the sub-key level', async () => {
     expect.hasAssertions();
 
-    const usersDb = (await getDb({ name: 'app' })).collection('users');
+    const {
+      MAX_SECTION_DESCRIPTION_LENGTH: maxDescLength,
+      MAX_SECTION_LOCATION_LENGTH: maxLocationLength,
+      MAX_SECTION_TITLE_LENGTH: maxTitleLength,
+      MAX_USER_SECTION_ITEMS: maxSectionItems,
+      MAX_USER_ABOUT_SECTION_LENGTH_BYTES: maxAboutLength,
+      MAX_USER_SKILLS_SECTION_ITEMS: maxSkills,
+      MAX_USER_SKILLS_SECTION_ITEM_LENGTH: maxSkillLength
+    } = getEnv();
+
+    const usersDb = await getUsersDb();
+    const userId = itemToObjectId(dummyAppData.users[2]);
 
     const patchUser: PatchUser = {
-      email: 'fake@email.com',
-      key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-      salt: '0'.repeat(getEnv().USER_SALT_LENGTH)
+      sections: {
+        about: 'a'.repeat(maxAboutLength)
+      }
     };
 
-    await expect(
-      usersDb.countDocuments({
-        email: dummyAppData.users[0].email,
-        ...patchUser
-      })
-    ).resolves.toBe(0);
+    await expect(usersDb.findOne({ _id: userId })).resolves.not.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
 
     await expect(
       Backend.updateUser({
-        usernameOrEmail: dummyAppData.users[0].email,
-        data: patchUser
+        apiVersion: 1,
+        user_id: itemToStringId(userId),
+        data: { sections: { about: patchUser.sections?.about } }
       })
     ).resolves.toBeUndefined();
 
+    await expect(usersDb.findOne({ _id: userId })).resolves.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
+
+    patchUser.sections!.education = [
+      {
+        title: 'education',
+        description: 'education',
+        location: 'education',
+        startedAt: mockDateNowMs,
+        endedAt: mockDateNowMs
+      }
+    ];
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.not.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
+
     await expect(
-      usersDb.countDocuments({
-        email: dummyAppData.users[0].email,
-        ...patchUser
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id: itemToStringId(userId),
+        data: { sections: { education: patchUser.sections?.education } }
       })
-    ).resolves.toBe(1);
+    ).resolves.toBeUndefined();
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
+
+    patchUser.sections!.experience = [
+      {
+        title: 'e'.repeat(maxTitleLength),
+        description: 'e'.repeat(maxDescLength),
+        location: 'e'.repeat(maxLocationLength),
+        startedAt: mockDateNowMs,
+        endedAt: null
+      }
+    ];
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.not.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id: itemToStringId(userId),
+        data: { sections: { experience: patchUser.sections?.experience } }
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
+
+    patchUser.sections!.volunteering = [
+      {
+        title: 'volunteering',
+        description: 'volunteering',
+        location: 'volunteering',
+        startedAt: mockDateNowMs,
+        endedAt: null
+      }
+    ];
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.not.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id: itemToStringId(userId),
+        data: { sections: { volunteering: patchUser.sections?.volunteering } }
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
+
+    patchUser.sections!.skills = ['leet', 'code', 'skills'];
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.not.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id: itemToStringId(userId),
+        data: { sections: { skills: patchUser.sections?.skills } }
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections }
+    );
+
+    const newSections = {
+      about: null,
+      skills: Array.from({ length: maxSkills }).map((_, index) =>
+        `${index}`.repeat(maxSkillLength)
+      ),
+      experience: Array.from({ length: maxSectionItems }).map(
+        () => patchUser.sections?.experience?.[0]
+      )
+    };
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id: itemToStringId(userId),
+        data: { sections: newSections }
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections, ...newSections }
+    );
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id: itemToStringId(userId),
+        // ? {about: ''} should be synonymous with {about: null}
+        data: { sections: { about: '' } }
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.toHaveProperty(
+      'sections',
+      { ...dummyAppData.users[2].sections, ...patchUser.sections, ...newSections }
+    );
+  });
+
+  test('incrementing views is reflected in the system info', async () => {
+    expect.hasAssertions();
+
+    const infoDb = await getInfoDb();
+    const usersDb = await getUsersDb();
+
+    const userId = itemToObjectId(dummyAppData.users[2]);
+    const patchUser: PatchUser = { views: 'increment' };
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.toHaveProperty(
+      'views',
+      dummyAppData.users[2].views
+    );
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'views',
+      dummyAppData.info[0].views
+    );
+
+    await Backend.updateUser({
+      apiVersion: 1,
+      user_id: itemToStringId(userId),
+      data: patchUser
+    });
+
+    await expect(usersDb.findOne({ _id: userId })).resolves.toHaveProperty(
+      'views',
+      dummyAppData.users[2].views + 1
+    );
+
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'views',
+      dummyAppData.info[0].views + 1
+    );
+  });
+
+  it('updates updateAt', async () => {
+    expect.hasAssertions();
+
+    const expectedUpdatedAt = mockDateNowMs + 10 ** 5;
+
+    jest.spyOn(Date, 'now').mockImplementation(() => expectedUpdatedAt);
+
+    const usersDb = await getUsersDb();
+    const userId = itemToObjectId(dummyAppData.users[0]);
+    const user_id = itemToStringId(dummyAppData.users[0]);
+
+    const { updatedAt: updatedAt1 } =
+      (await usersDb.findOne({ _id: userId })) || toss(new TrialError());
+
+    expect(updatedAt1).not.toBe(expectedUpdatedAt);
+
+    await expect(
+      Backend.updateUser({ apiVersion: 1, user_id, data: { type: 'inner' } })
+    ).resolves.toBeUndefined();
+
+    const { updatedAt: updatedAt2 } =
+      (await usersDb.findOne({ _id: userId })) || toss(new TrialError());
+
+    expect(updatedAt2).toBe(expectedUpdatedAt);
   });
 
   it('rejects if no data passed in', async () => {
@@ -3752,7 +3963,8 @@ describe('::updateUser', () => {
 
     await expect(
       Backend.updateUser({
-        usernameOrEmail: dummyAppData.users[0].email,
+        apiVersion: 1,
+        user_id: itemToStringId(dummyAppData.users[0]),
         data: {}
       })
     ).rejects.toMatchObject({
@@ -3760,71 +3972,123 @@ describe('::updateUser', () => {
     });
   });
 
-  it('rejects if attempting to update user with incorrect params for type', async () => {
-    expect.hasAssertions();
-
-    assert(dummyAppData.users[0].type === 'administrator');
-    assert(dummyAppData.users[2].type === 'blogger');
-
-    await expect(
-      Backend.updateUser({
-        usernameOrEmail: dummyAppData.users[2].email,
-        data: { banned: true }
-      })
-    ).resolves.toBeUndefined();
-
-    await expect(
-      Backend.updateUser({
-        usernameOrEmail: dummyAppData.users[0].email,
-        data: { banned: true }
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.UnknownField('banned')
-    });
-  });
-
-  it('rejects if the username or email undefined or not found', async () => {
+  it('rejects if the user_id is undefined, invalid, or not found', async () => {
     expect.hasAssertions();
 
     await expect(
       Backend.updateUser({
-        usernameOrEmail: 'fake-user',
-        data: {
-          email: 'fake@email.com',
-          key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-          salt: '0'.repeat(getEnv().USER_SALT_LENGTH)
-        }
+        apiVersion: 1,
+        user_id: undefined,
+        data: { email: 'fake@email.com' }
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound('fake-user', 'user')
+      message: ErrorMessage.InvalidItem('user_id', 'parameter')
     });
 
     await expect(
       Backend.updateUser({
-        usernameOrEmail: undefined,
-        data: {
-          email: 'fake@email.com',
-          key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-          salt: '0'.repeat(getEnv().USER_SALT_LENGTH)
-        }
+        apiVersion: 1,
+        user_id: 'bad',
+        data: { email: 'fake@email.com' }
       })
     ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('usernameOrEmail', 'parameter')
+      message: ErrorMessage.InvalidObjectId('bad')
+    });
+
+    const user_id = itemToStringId(new ObjectId());
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id,
+        data: { email: 'fake@email.com' }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.ItemNotFound(user_id, 'user')
     });
   });
 
   it('rejects when attempting to update a user to a duplicate email', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[1].username);
 
     await expect(
       Backend.updateUser({
-        usernameOrEmail: dummyAppData.users[1].username,
-        data: {
-          email: dummyAppData.users[0].email
-        }
+        apiVersion: 1,
+        user_id: itemToStringId(dummyAppData.users[1]),
+        data: { email: dummyAppData.users[0].email }
       })
     ).rejects.toMatchObject({ message: ErrorMessage.DuplicateFieldValue('email') });
+  });
+
+  it('rejects if fullName passed in V1 mode or fullName is not string in V2 mode', async () => {
+    expect.hasAssertions();
+
+    const user_id = itemToStringId(dummyAppData.users[0]);
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id,
+        data: { fullName: 'something' }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.UnknownField('fullName')
+    });
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 1,
+        user_id,
+        data: { fullName: null }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.UnknownField('fullName')
+    });
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 2,
+        user_id,
+        data: { fullName: 5 }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidStringLength(
+        'fullName',
+        1,
+        getEnv().MAX_USER_FULLNAME_LENGTH,
+        'alphanumeric (with spaces)'
+      )
+    });
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 2,
+        user_id,
+        data: { fullName: null }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidStringLength(
+        'fullName',
+        1,
+        getEnv().MAX_USER_FULLNAME_LENGTH,
+        'alphanumeric (with spaces)'
+      )
+    });
+
+    await expect(
+      Backend.updateUser({
+        apiVersion: 2,
+        user_id,
+        data: { fullName: 'x'.repeat(getEnv().MAX_USER_FULLNAME_LENGTH + 1) }
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.InvalidStringLength(
+        'fullName',
+        1,
+        getEnv().MAX_USER_FULLNAME_LENGTH,
+        'alphanumeric (with spaces)'
+      )
+    });
   });
 
   it('rejects if data is invalid or contains properties that violate limits', async () => {
@@ -3834,7 +4098,14 @@ describe('::updateUser', () => {
       MIN_USER_EMAIL_LENGTH: minELength,
       MAX_USER_EMAIL_LENGTH: maxELength,
       USER_SALT_LENGTH: saltLength,
-      USER_KEY_LENGTH: keyLength
+      USER_KEY_LENGTH: keyLength,
+      MAX_SECTION_DESCRIPTION_LENGTH: maxDescLength,
+      MAX_SECTION_LOCATION_LENGTH: maxLocationLength,
+      MAX_SECTION_TITLE_LENGTH: maxTitleLength,
+      MAX_USER_SECTION_ITEMS: maxSectionItems,
+      MAX_USER_ABOUT_SECTION_LENGTH_BYTES: maxAboutLength,
+      MAX_USER_SKILLS_SECTION_ITEMS: maxSkills,
+      MAX_USER_SKILLS_SECTION_ITEM_LENGTH: maxSkillLength
     } = getEnv();
 
     const patchUsers: [Parameters<typeof Backend.updateUser>[0]['data'], string][] = [
@@ -3911,6 +4182,225 @@ describe('::updateUser', () => {
         { salt: 'a'.repeat(saltLength) },
         ErrorMessage.InvalidStringLength('key', keyLength, null, 'hexadecimal')
       ],
+      [
+        { views: null },
+        ErrorMessage.InvalidFieldValue('views', 'null', ['increment'])
+      ],
+      [{ views: 5 }, ErrorMessage.InvalidFieldValue('views', '5', ['increment'])],
+      [{ views: '+1' }, ErrorMessage.InvalidFieldValue('views', '+1', ['increment'])],
+      [
+        { views: 'decrement' },
+        ErrorMessage.InvalidFieldValue('views', 'decrement', ['increment'])
+      ],
+      [
+        { type: 'blogger' },
+        ErrorMessage.InvalidFieldValue('type', 'blogger', userTypes)
+      ],
+      [{ type: null }, ErrorMessage.InvalidFieldValue('type', 'null', userTypes)],
+      [{ sections: null }, ErrorMessage.InvalidFieldValue('sections')],
+      [{ sections: [] }, ErrorMessage.InvalidFieldValue('sections')],
+      [
+        { sections: { about: true } },
+        ErrorMessage.InvalidStringLength('sections.about', 0, maxAboutLength, 'bytes')
+      ],
+      [
+        { sections: { about: 5 } },
+        ErrorMessage.InvalidStringLength('sections.about', 0, maxAboutLength, 'bytes')
+      ],
+      [
+        {
+          sections: {
+            about: 'something',
+            education: [
+              {
+                title: 'e'.repeat(maxTitleLength + 1),
+                description: 'e'.repeat(maxDescLength),
+                location: 'e'.repeat(maxLocationLength),
+                startedAt: mockDateNowMs,
+                endedAt: null
+              }
+            ]
+          }
+        },
+        ErrorMessage.InvalidStringLength(
+          'sections.education[0].title',
+          1,
+          maxTitleLength,
+          'string'
+        )
+      ],
+      [
+        {
+          sections: {
+            about: 'something',
+            education: [
+              {
+                title: 'e'.repeat(maxTitleLength),
+                description: 'e'.repeat(maxDescLength + 1),
+                location: 'e'.repeat(maxLocationLength),
+                startedAt: mockDateNowMs,
+                endedAt: null
+              }
+            ]
+          }
+        },
+        ErrorMessage.InvalidStringLength(
+          'sections.education[0].description',
+          1,
+          maxDescLength,
+          'string'
+        )
+      ],
+      [
+        {
+          sections: {
+            about: 'something',
+            education: [
+              {
+                title: 'e'.repeat(maxTitleLength),
+                description: 'e'.repeat(maxDescLength),
+                location: 'e'.repeat(maxLocationLength + 1),
+                startedAt: mockDateNowMs,
+                endedAt: null
+              }
+            ]
+          }
+        },
+        ErrorMessage.InvalidStringLength(
+          'sections.education[0].location',
+          1,
+          maxLocationLength,
+          'string'
+        )
+      ],
+      [
+        {
+          sections: {
+            about: 'something',
+            education: [
+              {
+                title: 'e'.repeat(maxTitleLength),
+                description: 'e'.repeat(maxDescLength),
+                location: 'e'.repeat(maxLocationLength),
+                startedAt: null,
+                endedAt: mockDateNowMs
+              }
+            ]
+          }
+        },
+        ErrorMessage.InvalidNumberValue(
+          'sections.education[0].startedAt',
+          1,
+          Number.MAX_SAFE_INTEGER,
+          'integer'
+        )
+      ],
+      [
+        {
+          sections: {
+            about: 'something',
+            education: [
+              {
+                title: 'e'.repeat(maxTitleLength),
+                description: 'e'.repeat(maxDescLength),
+                location: 'e'.repeat(maxLocationLength),
+                startedAt: -1,
+                endedAt: -1
+              }
+            ]
+          }
+        },
+        ErrorMessage.InvalidNumberValue(
+          'sections.education[0].startedAt',
+          1,
+          Number.MAX_SAFE_INTEGER,
+          'integer'
+        )
+      ],
+      [
+        {
+          sections: {
+            about: 'something',
+            education: [
+              {
+                title: 'e'.repeat(maxTitleLength),
+                description: 'e'.repeat(maxDescLength),
+                location: 'e'.repeat(maxLocationLength),
+                startedAt: mockDateNowMs,
+                endedAt: -1
+              }
+            ]
+          }
+        },
+        ErrorMessage.InvalidNumberValue(
+          'sections.education[0].endedAt',
+          mockDateNowMs,
+          Number.MAX_SAFE_INTEGER,
+          'integer',
+          true
+        )
+      ],
+      [
+        {
+          sections: {
+            about: 'something',
+            education: [
+              {
+                title: 'e'.repeat(maxTitleLength),
+                description: 'e'.repeat(maxDescLength),
+                location: 'e'.repeat(maxLocationLength),
+                startedAt: mockDateNowMs,
+                endedAt: mockDateNowMs - 1
+              }
+            ]
+          }
+        },
+        ErrorMessage.InvalidNumberValue(
+          'sections.education[0].endedAt',
+          mockDateNowMs,
+          Number.MAX_SAFE_INTEGER,
+          'integer',
+          true
+        )
+      ],
+      [
+        {
+          sections: {
+            about: 'something',
+            education: Array.from({ length: maxSectionItems + 1 }).map((_, index) => {
+              return {
+                title: `${index}`,
+                description: `${index}`,
+                location: `${index}`,
+                startedAt: mockDateNowMs,
+                endedAt: mockDateNowMs
+              };
+            })
+          }
+        },
+        ErrorMessage.TooMany(`sections.education items`, maxSectionItems)
+      ],
+      [
+        {
+          sections: {
+            about: 'something',
+            skills: Array.from({ length: maxSkills + 1 }).map((_, index) =>
+              `${index}`.repeat(maxSkillLength)
+            )
+          }
+        },
+        ErrorMessage.TooMany('skills', maxSkills)
+      ],
+      [
+        {
+          sections: { about: 'something', skills: ['x'.repeat(maxSkillLength + 1)] }
+        },
+        ErrorMessage.InvalidArrayValue(
+          'sections.skills',
+          'x'.repeat(maxSkillLength + 1),
+          0
+        )
+      ],
       [{ banned: 'true' as unknown as boolean }, ErrorMessage.UnknownField('banned')],
       [{ banned: null as unknown as boolean }, ErrorMessage.UnknownField('banned')],
       [{ data: 1 } as PatchUser, ErrorMessage.UnknownField('data')],
@@ -3931,31 +4421,20 @@ describe('::updateUser', () => {
     ];
 
     await expectExceptionsWithMatchingErrors(patchUsers, (data) => {
-      assert(dummyAppData.users[0].username);
       return Backend.updateUser({
-        usernameOrEmail: dummyAppData.users[0].username,
+        apiVersion: 1,
+        user_id: dummyAppData.users[0].username,
         data
       });
     });
 
-    await expectExceptionsWithMatchingErrors(
-      [
-        [
-          { banned: 'true' as unknown as boolean },
-          ErrorMessage.InvalidFieldValue('banned', 'true', ['true', 'false'])
-        ],
-        [
-          { banned: null as unknown as boolean },
-          ErrorMessage.InvalidFieldValue('banned', null, ['true', 'false'])
-        ]
-      ],
-      (data) => {
-        return Backend.updateUser({
-          usernameOrEmail: dummyAppData.users[2].email,
-          data
-        });
-      }
-    );
+    await expectExceptionsWithMatchingErrors(patchUsers, (data) => {
+      return Backend.updateUser({
+        apiVersion: 2,
+        user_id: dummyAppData.users[0].username,
+        data
+      });
+    });
   });
 });
 
@@ -4038,9 +4517,8 @@ describe('::renewSession', () => {
 
 // TODO: also updates updatedAt
 describe('::updateOpportunity', () => {
-  it('updates an existing page', async () => {
+  it('updates an existing opportunity', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[2].blogName);
 
     const usersDb = (await getDb({ name: 'app' })).collection('users');
     const { blogName } = dummyAppData.users[2];
@@ -4072,23 +4550,30 @@ describe('::updateOpportunity', () => {
     ).resolves.toBe(1);
   });
 
-  it('allows updating navLinks to an empty array', async () => {
+  test('incrementing views is reflected in the system info', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[2].blogName);
 
-    const usersDb = (await getDb({ name: 'app' })).collection('users');
-    const { blogName, _id } = dummyAppData.users[2];
+    const infoDb = await getInfoDb();
+    const __provenance = 'fake-owner';
+    const newUser: NewUser = {
+      username: 'new-user',
+      email: 'new-user@email.com',
+      key: '0'.repeat(getEnv().USER_KEY_LENGTH),
+      salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
+      type: 'administrator'
+    };
 
-    await expect(usersDb.countDocuments({ _id, navLinks: [] })).resolves.toBe(0);
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'users',
+      dummyAppData.users.length
+    );
 
-    await expect(
-      Backend.updateBlog({
-        blogName,
-        data: { navLinks: [] }
-      })
-    ).resolves.toBeUndefined();
+    await Backend.createUser({ apiVersion: 1, __provenance, data: newUser });
 
-    await expect(usersDb.countDocuments({ _id, navLinks: [] })).resolves.toBe(1);
+    await expect(infoDb.findOne()).resolves.toHaveProperty(
+      'users',
+      dummyAppData.users.length + 1
+    );
   });
 
   it('rejects if no data passed in', async () => {
@@ -4104,7 +4589,7 @@ describe('::updateOpportunity', () => {
     });
   });
 
-  it('rejects if the blogName undefined or not found', async () => {
+  it('rejects if the opportunity_id is undefined, invalid, or not found', async () => {
     expect.hasAssertions();
 
     await expect(
@@ -4123,19 +4608,6 @@ describe('::updateOpportunity', () => {
       })
     ).rejects.toMatchObject({
       message: ErrorMessage.InvalidItem('blogName', 'parameter')
-    });
-  });
-
-  it('rejects when attempting to update a blog to a duplicate blogName', async () => {
-    expect.hasAssertions();
-
-    await expect(
-      Backend.updateBlog({
-        blogName: dummyAppData.users[2].blogName,
-        data: { name: dummyAppData.users[3].blogName }
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.DuplicateFieldValue('blogName')
     });
   });
 
@@ -4347,229 +4819,8 @@ describe('::updateOpportunity', () => {
 
 // TODO: also updates updatedAt and deduplicates keywords and lowercases them
 describe('::updateArticle', () => {
-  it('updates an existing page', async () => {
+  it('todo', async () => {
     expect.hasAssertions();
-    assert(dummyAppData.users[2].blogName);
-
-    const pagesDb = (await getDb({ name: 'app' })).collection('pages');
-    const { blogName } = dummyAppData.users[2];
-    const { name: pageName, totalViews, _id } = dummyAppData.pages[0];
-
-    const patchPage: PatchPage = {
-      totalViews: 'increment',
-      contents: 'new-contents'
-    };
-
-    const expectedDocument = {
-      _id,
-      contents: patchPage.contents,
-      totalViews: totalViews + 1
-    };
-
-    await expect(pagesDb.countDocuments(expectedDocument)).resolves.toBe(0);
-
-    await expect(
-      Backend.updatePage({
-        blogName,
-        pageName,
-        data: patchPage
-      })
-    ).resolves.toBeUndefined();
-
-    await expect(pagesDb.countDocuments(expectedDocument)).resolves.toBe(1);
-  });
-
-  it('allows update to empty page contents', async () => {
-    expect.hasAssertions();
-    assert(dummyAppData.users[2].blogName);
-
-    const pagesDb = (await getDb({ name: 'app' })).collection('pages');
-    const { blogName } = dummyAppData.users[2];
-    const { name: pageName, totalViews, _id } = dummyAppData.pages[0];
-
-    const expectedDocument = {
-      _id,
-      contents: '',
-      totalViews
-    };
-
-    await expect(pagesDb.countDocuments(expectedDocument)).resolves.toBe(0);
-
-    await expect(
-      Backend.updatePage({
-        blogName,
-        pageName,
-        data: { contents: '' }
-      })
-    ).resolves.toBeUndefined();
-
-    await expect(pagesDb.countDocuments(expectedDocument)).resolves.toBe(1);
-  });
-
-  it('allows incrementing totalViews', async () => {
-    expect.hasAssertions();
-    assert(dummyAppData.users[2].blogName);
-
-    const pagesDb = (await getDb({ name: 'app' })).collection('pages');
-    const { blogName } = dummyAppData.users[2];
-    const { name: pageName, totalViews, _id } = dummyAppData.pages[0];
-
-    const expectedDocument = {
-      _id,
-      totalViews: totalViews + 1
-    };
-
-    await expect(pagesDb.countDocuments(expectedDocument)).resolves.toBe(0);
-
-    await expect(
-      Backend.updatePage({
-        blogName,
-        pageName,
-        data: { totalViews: 'increment' }
-      })
-    ).resolves.toBeUndefined();
-
-    await expect(pagesDb.countDocuments(expectedDocument)).resolves.toBe(1);
-  });
-
-  it('rejects if totalViews is not the string "increment"', async () => {
-    expect.hasAssertions();
-
-    await expect(
-      Backend.updatePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name,
-        data: { totalViews: 1 as unknown as 'increment' }
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidFieldValue('totalViews', '1', ['increment'])
-    });
-
-    await expect(
-      Backend.updatePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name,
-        data: { totalViews: null as unknown as 'increment' }
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidFieldValue('totalViews', null, ['increment'])
-    });
-
-    await expect(
-      Backend.updatePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name,
-        data: { totalViews: true as unknown as 'increment' }
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidFieldValue('totalViews', 'true', ['increment'])
-    });
-  });
-
-  it('rejects if no data passed in', async () => {
-    expect.hasAssertions();
-
-    await expect(
-      Backend.updatePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name,
-        data: {}
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.EmptyJSONBody()
-    });
-  });
-
-  it('rejects if blogName or pageName undefined or not found', async () => {
-    expect.hasAssertions();
-    const dne = 'does-not-exist';
-
-    await expect(
-      Backend.updatePage({
-        blogName: dne,
-        pageName: dummyAppData.pages[0].name,
-        data: {}
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'blog')
-    });
-
-    await expect(
-      Backend.updatePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dne,
-        data: {}
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.ItemNotFound(dne, 'page')
-    });
-
-    await expect(
-      Backend.updatePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: undefined,
-        data: {}
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('pageName', 'parameter')
-    });
-
-    await expect(
-      Backend.updatePage({
-        blogName: undefined,
-        pageName: dummyAppData.pages[0].name,
-        data: {}
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
-    });
-
-    await expect(
-      Backend.updatePage({
-        blogName: undefined,
-        pageName: undefined,
-        data: {}
-      })
-    ).rejects.toMatchObject({
-      message: ErrorMessage.InvalidItem('blogName', 'parameter')
-    });
-  });
-
-  it('rejects if data is invalid or contains properties that violate limits', async () => {
-    expect.hasAssertions();
-
-    const { MAX_BLOG_PAGE_CONTENTS_LENGTH_BYTES: maxCLength } = getEnv();
-
-    const patchPage: [Parameters<typeof Backend.updatePage>[0]['data'], string][] = [
-      [undefined as unknown as PatchPage, ErrorMessage.InvalidJSON()],
-      ['string data' as PatchPage, ErrorMessage.InvalidJSON()],
-      [
-        {
-          contents: null as unknown as string
-        },
-        ErrorMessage.InvalidStringLength('contents', 0, maxCLength, 'bytes')
-      ],
-      [
-        {
-          contents: 5 as unknown as string
-        },
-        ErrorMessage.InvalidStringLength('contents', 0, maxCLength, 'bytes')
-      ],
-      [
-        {
-          contents: 'x'.repeat(maxCLength + 1)
-        },
-        ErrorMessage.InvalidStringLength('contents', 0, maxCLength, 'bytes')
-      ]
-    ];
-
-    await expectExceptionsWithMatchingErrors(patchPage, (data) => {
-      return Backend.updatePage({
-        blogName: dummyAppData.users[2].blogName,
-        pageName: dummyAppData.pages[0].name,
-        data
-      });
-    });
   });
 });
 
@@ -4592,7 +4843,7 @@ describe('::deleteUser', () => {
     ).resolves.toBe(0);
   });
 
-  it('deleting a user is reflected in system info', async () => {
+  test('deleting a user is reflected in system info', async () => {
     expect.hasAssertions();
 
     const infoDb = await getInfoDb();
@@ -4612,7 +4863,7 @@ describe('::deleteUser', () => {
     );
   });
 
-  it('deleting a user disconnects their user_id from formerly-connected users', async () => {
+  test('deleting a user disconnects their user_id from formerly-connected users', async () => {
     expect.hasAssertions();
 
     const usersDb = await getUsersDb();
@@ -4710,7 +4961,7 @@ describe('::deleteSession', () => {
     ).resolves.toBe(0);
   });
 
-  it('deleting a session is reflected in system info', async () => {
+  test('deleting a session is reflected in system info', async () => {
     expect.hasAssertions();
 
     // * Doing a wee bit of cheating here by using the getInfo() function
@@ -4777,7 +5028,7 @@ describe('::deleteOpportunity', () => {
     ).resolves.toBe(0);
   });
 
-  it('deleting an opportunity is reflected in system info', async () => {
+  test('deleting an opportunity is reflected in system info', async () => {
     expect.hasAssertions();
 
     const infoDb = await getInfoDb();
@@ -4848,7 +5099,7 @@ describe('::deleteArticle', () => {
     ).resolves.toBe(0);
   });
 
-  it('deleting an article is reflected in system info', async () => {
+  test('deleting an article is reflected in system info', async () => {
     expect.hasAssertions();
 
     const infoDb = await getInfoDb();
@@ -5077,97 +5328,334 @@ describe('::authAppUser', () => {
   });
 });
 
-test('system info is updated when users, sessions, opportunities, and articles are successfully created and deleted', async () => {
+test('system info is updated when users, sessions, opportunities, and articles are successfully created, updated, and deleted', async () => {
   expect.hasAssertions();
 
   // TODO: emphasis on success! Failed things should not alter counts!
 
-  const { _id, ...expectedSystemInfo } = dummyAppData.info[0];
+  const expectedV1SystemInfo = toPublicInfo(dummyAppData.info[0], {
+    activeSessionCount: dummyActiveSessions.length,
+    allowArticles: false
+  });
 
-  await expect(Backend.getInfo()).resolves.toStrictEqual<PublicInfo>(
-    expectedSystemInfo
+  const expectedV2SystemInfo = toPublicInfo(dummyAppData.info[0], {
+    activeSessionCount: dummyActiveSessions.length,
+    allowArticles: true
+  });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    expectedV1SystemInfo
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    expectedV2SystemInfo
   );
 
   await Backend.createUser({
+    apiVersion: 1,
     __provenance: 'fake-owner',
     data: {
       username: 'new-user',
       email: 'new-user@email.com',
       key: '0'.repeat(getEnv().USER_KEY_LENGTH),
       salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-      type: 'blogger',
-      blogName: 'blog-name'
+      type: 'inner'
+    } as NewUser
+  });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV1SystemInfo,
+      users: expectedV1SystemInfo.users + 1
     }
-  });
-
-  await expect(Backend.getInfo()).resolves.toStrictEqual<PublicInfo>({
-    blogs: expectedSystemInfo.blogs + 1,
-    pages: expectedSystemInfo.pages + 1,
-    users: expectedSystemInfo.users + 1
-  });
-
-  await Backend.createPage({
-    __provenance: 'fake-owner',
-    blogName: 'blog-name',
-    data: {
-      name: 'page-name',
-      contents: '# Contact us\n\nA contact form goes here!'
-    }
-  });
-
-  await expect(Backend.getInfo()).resolves.toStrictEqual<PublicInfo>({
-    blogs: expectedSystemInfo.blogs + 1,
-    pages: expectedSystemInfo.pages + 2,
-    users: expectedSystemInfo.users + 1
-  });
-
-  await Backend.createUser({
-    __provenance: 'fake-owner',
-    data: {
-      // * We don't NEED to supply a username
-      email: 'new-user-2@email.com',
-      key: '0'.repeat(getEnv().USER_KEY_LENGTH),
-      salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
-      type: 'administrator'
-    }
-  });
-
-  await expect(Backend.getInfo()).resolves.toStrictEqual<PublicInfo>({
-    blogs: expectedSystemInfo.blogs + 1,
-    pages: expectedSystemInfo.pages + 2,
-    users: expectedSystemInfo.users + 2
-  });
-
-  await expect(
-    Backend.deletePage({ blogName: 'blog-name', pageName: 'page-name' })
-  ).resolves.toBeUndefined();
-
-  await expect(Backend.getInfo()).resolves.toStrictEqual<PublicInfo>({
-    blogs: expectedSystemInfo.blogs + 1,
-    pages: expectedSystemInfo.pages + 1,
-    users: expectedSystemInfo.users + 2
-  });
-
-  await expect(
-    Backend.deleteUser({ usernameOrEmail: 'new-user-2@email.com' })
-  ).resolves.toBeUndefined();
-
-  await expect(Backend.getInfo()).resolves.toStrictEqual<PublicInfo>({
-    blogs: expectedSystemInfo.blogs + 1,
-    pages: expectedSystemInfo.pages + 1,
-    users: expectedSystemInfo.users + 1
-  });
-
-  await expect(
-    Backend.deleteUser({ usernameOrEmail: 'new-user' })
-  ).resolves.toBeUndefined();
-
-  await expect(Backend.getInfo()).resolves.toStrictEqual<PublicInfo>(
-    expectedSystemInfo
   );
-});
 
-test('system info is updated when view counts on user profiles, opportunities, and articles are successfully updated', async () => {
-  expect.hasAssertions();
-  // TODO: emphasis on success! Failed things should not alter counts!
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      users: expectedV1SystemInfo.users + 1
+    }
+  );
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.createUser({
+      apiVersion: 1,
+      __provenance: 'fake-owner',
+      data: {
+        username: 'duplicate-email',
+        email: 'new-user@email.com',
+        key: '0'.repeat(getEnv().USER_KEY_LENGTH),
+        salt: '0'.repeat(getEnv().USER_SALT_LENGTH),
+        type: 'inner'
+      } as NewUser
+    })
+  ).rejects.toMatchObject({ message: ErrorMessage.DuplicateFieldValue('email') });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV1SystemInfo,
+      users: expectedV1SystemInfo.users + 1
+    }
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      users: expectedV1SystemInfo.users + 1
+    }
+  );
+
+  await Backend.createSession({
+    apiVersion: 1,
+    __provenance: 'fake-owner',
+    data: {
+      user_id: null,
+      view: 'auth',
+      viewed_id: null
+    } as NewSession
+  });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV1SystemInfo,
+      users: expectedV1SystemInfo.users + 1,
+      sessions: expectedV1SystemInfo.sessions + 1
+    }
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      users: expectedV1SystemInfo.users + 1,
+      sessions: expectedV1SystemInfo.sessions + 1
+    }
+  );
+
+  await Backend.createOpportunity({
+    apiVersion: 1,
+    __provenance: 'fake-owner',
+    data: {
+      contents: '',
+      creator_id: itemToStringId(dummyAppData.users[0]),
+      title: 'title'
+    } as NewOpportunity
+  });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV1SystemInfo,
+      users: expectedV1SystemInfo.users + 1,
+      sessions: expectedV1SystemInfo.sessions + 1,
+      opportunities: expectedV1SystemInfo.opportunities + 1
+    }
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      users: expectedV1SystemInfo.users + 1,
+      sessions: expectedV1SystemInfo.sessions + 1,
+      opportunities: expectedV1SystemInfo.opportunities + 1
+    }
+  );
+
+  await Backend.createArticle({
+    __provenance: 'fake-owner',
+    data: {
+      contents: '',
+      creator_id: itemToStringId(dummyAppData.users[0]),
+      title: 'title',
+      keywords: []
+    } as NewArticle
+  });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV1SystemInfo,
+      users: expectedV1SystemInfo.users + 1,
+      sessions: expectedV1SystemInfo.sessions + 1,
+      opportunities: expectedV1SystemInfo.opportunities + 1
+    }
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      users: expectedV1SystemInfo.users + 1,
+      sessions: expectedV1SystemInfo.sessions + 1,
+      opportunities: expectedV1SystemInfo.opportunities + 1,
+      articles: expectedV2SystemInfo.articles! + 1
+    }
+  );
+
+  // * Begin deletes
+
+  await Backend.deleteUser({ user_id: itemToStringId(dummyAppData.users[0]) });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV1SystemInfo,
+      sessions: expectedV1SystemInfo.sessions + 1,
+      opportunities: expectedV1SystemInfo.opportunities + 1
+    }
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      sessions: expectedV1SystemInfo.sessions + 1,
+      opportunities: expectedV1SystemInfo.opportunities + 1,
+      // ? The deleted user had 1 article + 1 one created above = -2 + 1 = -1
+      articles: expectedV2SystemInfo.articles! - 1
+    }
+  );
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.deleteUser({ user_id: itemToStringId(dummyAppData.users[0]) })
+  ).rejects.toMatchObject({ message: expect.stringContaining('not found') });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV1SystemInfo,
+      sessions: expectedV1SystemInfo.sessions + 1,
+      opportunities: expectedV1SystemInfo.opportunities + 1
+    }
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      sessions: expectedV1SystemInfo.sessions + 1,
+      opportunities: expectedV1SystemInfo.opportunities + 1,
+      articles: expectedV2SystemInfo.articles! - 1
+    }
+  );
+
+  await Backend.deleteSession({ session_id: itemToStringId(dummyActiveSessions[0]) });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV1SystemInfo,
+      opportunities: expectedV1SystemInfo.opportunities + 1
+    }
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      opportunities: expectedV1SystemInfo.opportunities + 1,
+      articles: expectedV2SystemInfo.articles! - 1
+    }
+  );
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.deleteSession({ session_id: itemToStringId(dummyActiveSessions[0]) })
+  ).rejects.toMatchObject({ message: expect.stringContaining('not found') });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV1SystemInfo,
+      opportunities: expectedV1SystemInfo.opportunities + 1
+    }
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      opportunities: expectedV1SystemInfo.opportunities + 1,
+      articles: expectedV2SystemInfo.articles! - 1
+    }
+  );
+
+  await Backend.deleteOpportunity({
+    opportunity_id: itemToStringId(dummyAppData.opportunities[0])
+  });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    expectedV1SystemInfo
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      articles: expectedV2SystemInfo.articles! - 1
+    }
+  );
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.deleteOpportunity({
+      opportunity_id: itemToStringId(dummyAppData.opportunities[0])
+    })
+  ).rejects.toMatchObject({ message: expect.stringContaining('not found') });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    expectedV1SystemInfo
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      articles: expectedV2SystemInfo.articles! - 1
+    }
+  );
+
+  await Backend.deleteArticle({
+    article_id: itemToStringId(dummyAppData.articles[1])
+  });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    expectedV1SystemInfo
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    { ...expectedV2SystemInfo, articles: expectedV2SystemInfo.articles! - 2 }
+  );
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.deleteArticle({
+      article_id: itemToStringId(dummyAppData.articles[0])
+    })
+  ).rejects.toMatchObject({ message: expect.stringContaining('not found') });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    expectedV1SystemInfo
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    { ...expectedV2SystemInfo, articles: expectedV2SystemInfo.articles! - 2 }
+  );
+
+  // * Ensure failures don't alter system info
+  await expect(
+    Backend.deleteArticle({
+      article_id: itemToStringId(dummyAppData.articles[1])
+    })
+  ).rejects.toMatchObject({ message: expect.stringContaining('not found') });
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    expectedV1SystemInfo
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    { ...expectedV2SystemInfo, articles: expectedV2SystemInfo.articles! - 2 }
+  );
+
+  // TODO: update tests here
+
+  await expect(Backend.getInfo({ apiVersion: 1 })).resolves.toStrictEqual<PublicInfo>(
+    { ...expectedV1SystemInfo, views: expectedV1SystemInfo.views + 3 }
+  );
+
+  await expect(Backend.getInfo({ apiVersion: 2 })).resolves.toStrictEqual<PublicInfo>(
+    {
+      ...expectedV2SystemInfo,
+      views: expectedV1SystemInfo.views + 3,
+      articles: expectedV2SystemInfo.articles! - 2
+    }
+  );
 });

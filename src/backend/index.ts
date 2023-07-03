@@ -777,12 +777,17 @@ export async function updateUser({
 
   const sectionUpdates = Object.fromEntries(
     Object.entries(sections || {}).map(([key, value]) => {
-      return key === 'skills' && Array.isArray(value)
-        ? [
-            `sections.${key}`,
-            Array.from(new Set(value.map((s) => s.toString().toLowerCase())))
-          ]
-        : [`sections.${key}`, value];
+      const path = `sections.${key}`;
+      if (key === 'skills' && Array.isArray(value)) {
+        return [
+          path,
+          Array.from(new Set(value.map((s) => s.toString().toLowerCase())))
+        ];
+      } else if (key === 'about' && !value) {
+        return [path, null];
+      } else {
+        return [path, value];
+      }
     })
   );
 
@@ -798,9 +803,9 @@ export async function updateUser({
             ...(key ? { key: key.toLowerCase() } : {}),
             ...(salt ? { salt: salt.toLowerCase() } : {}),
             ...(type ? { type } : {}),
-            ...(shouldIncrementViews ? { $inc: { views: 1 } } : {}),
             ...sectionUpdates
-          }
+          },
+          ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
         }
       ),
       shouldIncrementViews
@@ -808,10 +813,9 @@ export async function updateUser({
         : Promise.resolve()
     ]);
 
-    assert(
-      result.matchedCount === 1,
-      `expected 1 matched document, ${result.matchedCount} were matched`
-    );
+    if (result.matchedCount !== 1) {
+      throw new ItemNotFoundError(user_id, 'user');
+    }
   } catch (error) {
     if (
       error instanceof MongoServerError &&
@@ -872,9 +876,9 @@ export async function updateOpportunity({
         $set: {
           updateAt: Date.now(),
           ...(contents ? { contents } : {}),
-          ...(title ? { title } : {}),
-          ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
-        }
+          ...(title ? { title } : {})
+        },
+        ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
       }
     ),
     shouldIncrementViews
@@ -882,10 +886,9 @@ export async function updateOpportunity({
       : Promise.resolve()
   ]);
 
-  assert(
-    result.matchedCount === 1,
-    `expected 1 matched document, ${result.matchedCount} were matched`
-  );
+  if (result.matchedCount !== 1) {
+    throw new ItemNotFoundError(opportunity_id, 'opportunity');
+  }
 }
 
 export async function updateArticle({
@@ -916,9 +919,9 @@ export async function updateArticle({
           ...(title ? { title } : {}),
           ...(keywords
             ? { keywords: Array.from(new Set(keywords.map((s) => s.toLowerCase()))) }
-            : {}),
-          ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
-        }
+            : {})
+        },
+        ...(shouldIncrementViews ? { $inc: { views: 1 } } : {})
       }
     ),
     shouldIncrementViews
@@ -926,10 +929,9 @@ export async function updateArticle({
       : Promise.resolve()
   ]);
 
-  assert(
-    result.matchedCount === 1,
-    `expected 1 matched document, ${result.matchedCount} were matched`
-  );
+  if (result.matchedCount !== 1) {
+    throw new ItemNotFoundError(article_id, 'article');
+  }
 }
 
 export async function deleteUser({
@@ -956,7 +958,7 @@ export async function deleteUser({
   const [deleteUsersCount] = await Promise.all([
     usersDb.deleteOne({ _id: userId }).then(async ({ deletedCount }) => {
       await Promise.all([
-        infoDb.updateOne({}, { $inc: { users: -1 } }),
+        infoDb.updateOne({}, { $inc: { users: -1 * deletedCount } }),
         usersDb.updateMany(
           { _id: { $in: connections } },
           { $pull: { connections: userId } }
@@ -1012,7 +1014,7 @@ export async function deleteOpportunity({
   const deletedCount = await opportunitiesDb
     .deleteOne({ _id: itemToObjectId(opportunity_id) })
     .then(async ({ deletedCount }) => {
-      await infoDb.updateOne({}, { $inc: { opportunities: -1 } });
+      await infoDb.updateOne({}, { $inc: { opportunities: -1 * deletedCount } });
       return deletedCount;
     });
 
@@ -1037,7 +1039,7 @@ export async function deleteArticle({
   const deletedCount = await articlesDb
     .deleteOne({ _id: itemToObjectId(article_id) })
     .then(async ({ deletedCount }) => {
-      await infoDb.updateOne({}, { $inc: { articles: -1 } });
+      await infoDb.updateOne({}, { $inc: { articles: -1 * deletedCount } });
       return deletedCount;
     });
 

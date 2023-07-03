@@ -24,6 +24,7 @@ import {
   type PatchUser,
   type PatchOpportunity,
   type PatchArticle,
+  type UserId,
   toPublicUser,
   toPublicSession,
   toPublicOpportunity,
@@ -35,8 +36,7 @@ import {
   getSessionsDb,
   getOpportunitiesDb,
   getArticlesDb,
-  getInfoDb,
-  UserId
+  getInfoDb
 } from 'universe/backend/db';
 
 import { mockDateNowMs, useMockDateNow } from 'multiverse/mongo-common';

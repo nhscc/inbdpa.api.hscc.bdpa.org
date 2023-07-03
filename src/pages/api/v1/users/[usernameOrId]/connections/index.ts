@@ -16,7 +16,10 @@ export default withMiddleware(
     switch (req.method) {
       case 'GET': {
         sendHttpOk(res, {
-          connections: await getUserConnections({ user_id: usernameOrId })
+          connections: await getUserConnections({
+            user_id: usernameOrId,
+            after_id: req.query.after?.toString()
+          })
         });
         break;
       }

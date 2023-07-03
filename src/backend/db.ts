@@ -2,7 +2,7 @@ import { getEnv } from 'universe/backend/env';
 import { getCommonSchemaConfig } from 'multiverse/mongo-common';
 import { getDb, type DbSchema } from 'multiverse/mongo-schema';
 
-import type { Document, ObjectId, WithId, WithoutId } from 'mongodb';
+import type { Document, ObjectId, WithId } from 'mongodb';
 import type { TokenAttributes } from 'multiverse/next-auth';
 
 /**

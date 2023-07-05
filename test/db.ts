@@ -66,7 +66,7 @@ const users: InternalUser[] = [
           title: 'Something Something College',
           location: 'Somewhere, USA',
           description: 'Did college stuff.',
-          startedAt: mockDateNowMs - 10 ** 100,
+          startedAt: mockDateNowMs - 10 ** 12 - 1,
           endedAt: mockDateNowMs - 10 ** 10
         }
       ],
@@ -75,7 +75,7 @@ const users: InternalUser[] = [
           title: 'Something Something Company',
           location: 'Somewhere, USA',
           description: 'Did company stuff.',
-          startedAt: mockDateNowMs - 10 ** 100,
+          startedAt: mockDateNowMs - 10 ** 12 - 1,
           endedAt: mockDateNowMs - 10 ** 10
         }
       ],
@@ -85,7 +85,7 @@ const users: InternalUser[] = [
           title: 'Something Something Place',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: mockDateNowMs - 10 ** 100,
+          startedAt: mockDateNowMs - 10 ** 12 - 1,
           endedAt: mockDateNowMs - 10 ** 10
         }
       ]
@@ -111,21 +111,21 @@ const users: InternalUser[] = [
           title: 'Something Something College',
           location: 'Somewhere, USA',
           description: 'Did college stuff.',
-          startedAt: mockDateNowMs - 10 ** 100,
-          endedAt: mockDateNowMs - 10 ** 50
+          startedAt: mockDateNowMs - 10 ** 12 - 1,
+          endedAt: mockDateNowMs - 10 ** 12
         },
         {
           title: 'Something Something Secondary College',
           location: 'Somewhere Else, USA',
           description: 'Did more college stuff.',
-          startedAt: mockDateNowMs - 10 ** 50,
-          endedAt: mockDateNowMs - 10 ** 25
+          startedAt: mockDateNowMs - 10 ** 12,
+          endedAt: mockDateNowMs - 10 ** 11
         },
         {
           title: 'Something Something Graduate School',
           location: 'Someplace, USA',
           description: 'Did even more college stuff.',
-          startedAt: mockDateNowMs - 10 ** 25,
+          startedAt: mockDateNowMs - 10 ** 11,
           endedAt: mockDateNowMs - 10 ** 5
         }
       ],
@@ -134,21 +134,21 @@ const users: InternalUser[] = [
           title: 'Something Something Company',
           location: 'Somewhere, USA',
           description: 'Did company stuff.',
-          startedAt: mockDateNowMs - 10 ** 100,
+          startedAt: mockDateNowMs - 10 ** 12 - 1,
           endedAt: mockDateNowMs - 10 ** 10
         },
         {
           title: 'Something Something Else Company',
           location: 'Somewhere Else, USA',
           description: 'Doing different company stuff.',
-          startedAt: mockDateNowMs - 10 ** 50,
+          startedAt: mockDateNowMs - 10 ** 12,
           endedAt: null
         },
         {
           title: 'Third Company',
           location: 'Third Location, USA',
           description: 'Doing different company stuff.',
-          startedAt: mockDateNowMs - 10 ** 25,
+          startedAt: mockDateNowMs - 10 ** 11,
           endedAt: mockDateNowMs - 10 ** 5
         },
         {
@@ -174,35 +174,35 @@ const users: InternalUser[] = [
           title: 'Something Something Place 1',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: mockDateNowMs - 10 ** 100,
-          endedAt: mockDateNowMs - 10 ** 80
+          startedAt: mockDateNowMs - 10 ** 12 - 1,
+          endedAt: mockDateNowMs - 10 ** 12 - 1
         },
         {
           title: 'Something Something Place 2',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: mockDateNowMs - 10 ** 80,
-          endedAt: mockDateNowMs - 10 ** 60
+          startedAt: mockDateNowMs - 10 ** 12 - 1,
+          endedAt: mockDateNowMs - 10 ** 11 - 1
         },
         {
           title: 'Something Something Place 3',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: mockDateNowMs - 10 ** 60,
-          endedAt: mockDateNowMs - 10 ** 40
+          startedAt: mockDateNowMs - 10 ** 11 - 1,
+          endedAt: mockDateNowMs - 10 ** 10
         },
         {
           title: 'Something Something Place 4',
           location: 'Wakanda',
           description: 'Did volunteering stuff.',
-          startedAt: mockDateNowMs - 10 ** 40,
-          endedAt: mockDateNowMs - 10 ** 20
+          startedAt: mockDateNowMs - 10 ** 10,
+          endedAt: mockDateNowMs - 10 ** 9
         },
         {
           title: 'Something Something Place 5',
           location: 'Somewhere, USA',
           description: 'Did volunteering stuff.',
-          startedAt: mockDateNowMs - 10 ** 20,
+          startedAt: mockDateNowMs - 10 ** 5,
           endedAt: mockDateNowMs
         }
       ]

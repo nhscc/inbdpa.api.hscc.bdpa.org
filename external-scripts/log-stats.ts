@@ -502,7 +502,7 @@ const invoked = async () => {
             .sort(byRequests)
             .forEach(({ status, requests: requestResponseStatus }) => {
               const str = `    ${status} - ${requestResponseStatus} requests`;
-              outputStrings.push(status === 429 ? chalk.red(str) : str, '');
+              outputStrings.push(status === 429 ? chalk.red(str) : str);
             });
 
           outputStrings.push('  requests by HTTP method:');

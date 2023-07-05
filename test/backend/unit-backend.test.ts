@@ -2718,13 +2718,23 @@ describe('::createSession', () => {
       viewed_id
     };
 
-    const sessionId = await Backend.createSession({
-      apiVersion: 1,
+    let sessionId = await Backend.createSession({
+      apiVersion: 2,
       __provenance,
       data: newSession
     });
 
     expect(sessionId).toBeInstanceOf(ObjectId);
+
+    await expect(
+      (await getSessionsDb()).countDocuments({ _id: sessionId })
+    ).resolves.toBe(1);
+
+    sessionId = await Backend.createSession({
+      apiVersion: 1,
+      __provenance,
+      data: { view: newSession.view, viewed_id: newSession.viewed_id }
+    });
 
     await expect(
       (await getSessionsDb()).countDocuments({ _id: sessionId })
@@ -2736,7 +2746,6 @@ describe('::createSession', () => {
 
     const __provenance = 'fake-owner';
     const newSession: NewSession = {
-      user_id: itemToStringId(dummyAppData.users[0]._id),
       view: 'profile',
       viewed_id: itemToStringId(dummyAppData.users[1]._id)
     };
@@ -2862,6 +2871,28 @@ describe('::createSession', () => {
     });
   });
 
+  it('rejects if given user_id and apiVersion !== 2', async () => {
+    expect.hasAssertions();
+
+    await expect(
+      Backend.createSession({
+        apiVersion: 1,
+        data: { user_id: null, view: 'home', viewed_id: null },
+        __provenance: 'fake-owner'
+      })
+    ).rejects.toMatchObject({
+      message: ErrorMessage.UnknownField('user_id')
+    });
+
+    await expect(
+      Backend.createSession({
+        apiVersion: 2,
+        data: { user_id: null, view: 'home', viewed_id: null },
+        __provenance: 'fake-owner'
+      })
+    ).resolves.toBeDefined();
+  });
+
   it('rejects if data is invalid or contains properties that violate limits', async () => {
     expect.hasAssertions();
 
@@ -2873,19 +2904,6 @@ describe('::createSession', () => {
     ][] = [
       [undefined, ErrorMessage.InvalidJSON()],
       ['string data', ErrorMessage.InvalidJSON()],
-      [{} as NewSession, ErrorMessage.InvalidFieldValue('user_id', 'undefined')],
-      [
-        { user_id: 5 } as unknown as NewSession,
-        ErrorMessage.InvalidFieldValue('user_id', '5')
-      ],
-      [
-        { user_id: true } as unknown as NewSession,
-        ErrorMessage.InvalidFieldValue('user_id', 'true')
-      ],
-      [
-        { user_id: itemToStringId(dummyAppData.users[0]._id) } as NewSession,
-        expect.stringContaining(': home, auth, admin')
-      ],
       [
         {
           user_id: itemToStringId(dummyAppData.users[0]._id),
@@ -2927,16 +2945,8 @@ describe('::createSession', () => {
         expect.stringContaining(': a user_id, an opportunity_id')
       ],
       [
-        { user_id: 'bad', view: 'admin', viewed_id: null } as unknown as NewSession,
-        ErrorMessage.InvalidObjectId('bad')
-      ],
-      [
         { user_id: null, view: 'profile', viewed_id: 'bad' } as NewSession,
         ErrorMessage.InvalidObjectId('bad')
-      ],
-      [
-        { user_id: fake_id, view: 'admin', viewed_id: null } as NewSession,
-        ErrorMessage.ItemNotFound(fake_id, 'user')
       ],
       [
         { user_id: null, view: 'profile', viewed_id: fake_id } as NewSession,
@@ -2965,12 +2975,47 @@ describe('::createSession', () => {
       ]
     ];
 
-    await expectExceptionsWithMatchingErrors(newSessions, (data) =>
-      Backend.createSession({ apiVersion: 1, data, __provenance: 'fake-owner' })
+    await expectExceptionsWithMatchingErrors(
+      newSessions.map(([data, error]) => {
+        if (isPlainObject(data)) {
+          const clone = { ...data };
+          delete clone.user_id;
+          return [clone, error];
+        } else {
+          return [data, error];
+        }
+      }),
+      (data) =>
+        Backend.createSession({ apiVersion: 1, data, __provenance: 'fake-owner' })
     );
 
-    await expectExceptionsWithMatchingErrors(newSessions, (data) =>
-      Backend.createSession({ apiVersion: 2, data, __provenance: 'fake-owner' })
+    await expectExceptionsWithMatchingErrors(
+      [
+        [{} as NewSession, ErrorMessage.InvalidFieldValue('user_id', 'undefined')],
+        [
+          { user_id: 5 } as unknown as NewSession,
+          ErrorMessage.InvalidFieldValue('user_id', '5')
+        ],
+        [
+          { user_id: true } as unknown as NewSession,
+          ErrorMessage.InvalidFieldValue('user_id', 'true')
+        ],
+        [
+          { user_id: itemToStringId(dummyAppData.users[0]._id) } as NewSession,
+          expect.stringContaining(': home, auth, admin')
+        ],
+        [
+          { user_id: 'bad', view: 'admin', viewed_id: null } as unknown as NewSession,
+          ErrorMessage.InvalidObjectId('bad')
+        ],
+        [
+          { user_id: fake_id, view: 'admin', viewed_id: null } as NewSession,
+          ErrorMessage.ItemNotFound(fake_id, 'user')
+        ],
+        ...newSessions
+      ],
+      (data) =>
+        Backend.createSession({ apiVersion: 2, data, __provenance: 'fake-owner' })
     );
   });
 });
@@ -5584,7 +5629,6 @@ test('system info is updated when users, sessions, opportunities, and articles a
     apiVersion: 1,
     __provenance: 'fake-owner',
     data: {
-      user_id: null,
       view: 'auth',
       viewed_id: null
     } as NewSession

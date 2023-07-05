@@ -304,7 +304,9 @@ export type PublicSession = Pick<
 /**
  * The shape of a new session.
  */
-export type NewSession = Pick<PublicSession, 'user_id' | 'viewed_id' | 'view'>;
+export type NewSession = Pick<PublicSession, 'viewed_id' | 'view'> & {
+  user_id?: PublicSession['user_id'];
+};
 
 /**
  * The shape of an internal opportunity.

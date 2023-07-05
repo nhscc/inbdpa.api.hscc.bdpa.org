@@ -274,7 +274,7 @@ export function validateNewSessionData(
   }
 
   if (!allowArticleAndUserId && user_id !== undefined) {
-    throw new ValidationError(ErrorMessage.UnknownField(restKeys[0]));
+    throw new ValidationError(ErrorMessage.UnknownField('user_id'));
   }
 }
 

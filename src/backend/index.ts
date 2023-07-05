@@ -588,7 +588,7 @@ export async function createSession({
   const now = Date.now();
   const { user_id, view, viewed_id } = data;
 
-  const userId = user_id !== null ? itemToObjectId(user_id) : null;
+  const userId = typeof user_id === 'string' ? itemToObjectId(user_id) : null;
   const viewedId = viewed_id !== null ? itemToObjectId(viewed_id) : null;
 
   if (userId && !(await itemExists(usersDb, userId))) {

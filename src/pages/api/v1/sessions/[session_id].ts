@@ -30,6 +30,14 @@ export default withMiddleware(
   },
   {
     descriptor: metadata.descriptor,
-    options: { allowedMethods: ['PATCH', 'DELETE'], apiVersion: '1' }
+    options: {
+      allowedMethods: ['PATCH', 'DELETE'],
+      apiVersion: '1',
+      allowedContentTypes: {
+        GET: 'none',
+        PATCH: ['application/json', 'none'],
+        DELETE: 'none'
+      }
+    }
   }
 );

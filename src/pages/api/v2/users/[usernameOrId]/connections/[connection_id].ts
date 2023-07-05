@@ -31,6 +31,10 @@ export default withMiddleware(
   },
   {
     descriptor: metadata.descriptor,
-    options: { allowedMethods: ['POST', 'DELETE'], apiVersion: '2' }
+    options: {
+      allowedMethods: ['POST', 'DELETE'],
+      apiVersion: '2',
+      allowedContentTypes: { POST: ['application/json', 'none'], DELETE: 'none' }
+    }
   }
 );

@@ -580,7 +580,7 @@ export async function createSession({
     throw new AppValidationError('invalid provenance token attribute owner');
   }
 
-  validateNewSessionData(data, { allowArticle: apiVersion === 2 });
+  validateNewSessionData(data, { allowArticleAndUserId: apiVersion === 2 });
 
   const sessionDb = await getSessionsDb();
   const usersDb = await getUsersDb();

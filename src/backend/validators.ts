@@ -208,15 +208,16 @@ export function validatePatchUserData(
  */
 export function validateNewSessionData(
   data: unknown,
-  { allowArticle }: { allowArticle: boolean }
+  { allowArticleAndUserId }: { allowArticleAndUserId: boolean }
 ): asserts data is Pick<NewSession, 'user_id' | 'view' | 'viewed_id'> {
   if (!isPlainObject(data)) {
     throw new ValidationError(ErrorMessage.InvalidJSON());
   }
 
   if (
-    data.user_id === undefined ||
-    (data.user_id !== null && typeof data.user_id !== 'string')
+    allowArticleAndUserId &&
+    (data.user_id === undefined ||
+      (data.user_id !== null && typeof data.user_id !== 'string'))
   ) {
     throw new ValidationError(
       ErrorMessage.InvalidFieldValue('user_id', String(data.user_id))
@@ -227,13 +228,13 @@ export function validateNewSessionData(
     data.view === undefined ||
     typeof data.view !== 'string' ||
     !sessionViews.includes(data.view as SessionView) ||
-    (!allowArticle && data.view === 'article')
+    (!allowArticleAndUserId && data.view === 'article')
   ) {
     throw new ValidationError(
       ErrorMessage.InvalidFieldValue(
         'view',
         undefined,
-        sessionViews.filter((view) => allowArticle || view !== 'article')
+        sessionViews.filter((view) => allowArticleAndUserId || view !== 'article')
       )
     );
   }
@@ -246,14 +247,14 @@ export function validateNewSessionData(
       ErrorMessage.InvalidFieldValue('viewed_id', String(data.viewed_id), [
         'a user_id',
         'an opportunity_id',
-        ...(allowArticle ? ['an article_id'] : [])
+        ...(allowArticleAndUserId ? ['an article_id'] : [])
       ])
     );
   }
 
   const allowedViewedIdSessionViews: SessionView[] = ['opportunity', 'profile'];
 
-  if (allowArticle) {
+  if (allowArticleAndUserId) {
     allowedViewedIdSessionViews.unshift('article');
   }
 
@@ -269,6 +270,10 @@ export function validateNewSessionData(
   const restKeys = Object.keys(rest);
 
   if (restKeys.length !== 0) {
+    throw new ValidationError(ErrorMessage.UnknownField(restKeys[0]));
+  }
+
+  if (!allowArticleAndUserId && user_id !== undefined) {
     throw new ValidationError(ErrorMessage.UnknownField(restKeys[0]));
   }
 }

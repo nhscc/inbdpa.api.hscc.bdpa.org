@@ -18,7 +18,7 @@ export default withMiddleware(
         sendHttpOk(res, {
           session_id: await createSession({
             data: req.body,
-            includeArticleInErrorMessage: false,
+            apiVersion: 1,
             __provenance: await authorizationHeaderToOwnerAttribute(
               req.headers.authorization
             )

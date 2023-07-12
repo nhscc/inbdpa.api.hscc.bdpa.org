@@ -42,7 +42,13 @@ const invoked = async () => {
       );
     }
 
-    log('compiling statistics...');
+    let show404s = false;
+
+    if (globalThis.process.argv.includes('--show-404s')) {
+      show404s = true;
+    }
+
+    log(`compiling statistics (404s ${show404s ? 'shown' : 'hidden'})...`);
 
     const previousResults: Record<string, number> = await (async () => {
       try {
@@ -516,12 +522,31 @@ const invoked = async () => {
 
           outputStrings.push('  requests by endpoint:');
 
+          const _404Array: string[] = [];
+
           endpoints
             .sort(byRequests)
             .forEach(({ endpoint, requests: requestsToEndpoint }) => {
               const str = `    ${endpoint} - ${requestsToEndpoint} requests`;
-              outputStrings.push(endpoint === '<unknown>' ? chalk.gray(str) : str);
+
+              if (endpoint.startsWith('404:')) {
+                _404Array.push(str);
+              } else {
+                outputStrings.push(endpoint === '<unknown>' ? chalk.gray(str) : str);
+              }
             });
+
+          if (_404Array.length) {
+            if (show404s) {
+              _404Array.forEach((str) => outputStrings.push(chalk.gray(str)));
+            } else {
+              outputStrings.push(
+                chalk.gray(
+                  `(${_404Array.length} 404s elided, use --show-404s to view)`
+                )
+              );
+            }
+          }
 
           outputStrings.push('');
         }

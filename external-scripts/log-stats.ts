@@ -542,7 +542,7 @@ const invoked = async () => {
             } else {
               outputStrings.push(
                 chalk.gray(
-                  `(${_404Array.length} 404s elided, use --show-404s to view)`
+                  `    [${_404Array.length} 404s elided, use --show-404s to view]`
                 )
               );
             }

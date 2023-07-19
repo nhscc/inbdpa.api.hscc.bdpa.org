@@ -165,7 +165,7 @@ const invoked = async () => {
                   endpoint: {
                     $cond: {
                       if: { $not: ['$endpoint'] },
-                      then: '<unknown>',
+                      then: '<data missing>',
                       else: '$endpoint'
                     }
                   }
@@ -275,52 +275,82 @@ const invoked = async () => {
       { $match: { durationMs: { $exists: true } } },
       { $sort: { durationMs: 1 } },
       {
+        $addFields: {
+          endpoint: { $ifNull: ['$endpoint', '<no endpoint>'] },
+          resStatusCode: { $ifNull: ['$resStatusCode', '<no status>'] },
+          method: { $ifNull: ['$method', '<no method>'] }
+        }
+      },
+      {
         $group: {
           _id: null,
-          durations: { $push: '$durationMs' }
+          durations: { $push: '$durationMs' },
+          endpoints: { $push: '$endpoint' },
+          statuses: { $push: '$resStatusCode' },
+          methods: { $push: '$method' }
+        }
+      },
+      {
+        $addFields: {
+          index_50: { $floor: { $multiply: [0.5, { $size: '$durations' }] } },
+          index_90: { $floor: { $multiply: [0.9, { $size: '$durations' }] } },
+          index_95: { $floor: { $multiply: [0.95, { $size: '$durations' }] } },
+          index_99: { $floor: { $multiply: [0.99, { $size: '$durations' }] } },
+          index_999: { $floor: { $multiply: [0.999, { $size: '$durations' }] } },
+          index_9999: { $floor: { $multiply: [0.9999, { $size: '$durations' }] } }
         }
       },
       {
         $project: {
           _id: false,
-          fastest: { $arrayElemAt: ['$durations', 0] },
+          fastest: {
+            duration: { $arrayElemAt: ['$durations', 0] },
+            endpoint: { $arrayElemAt: ['$endpoints', 0] },
+            status: { $arrayElemAt: ['$statuses', 0] },
+            method: { $arrayElemAt: ['$methods', 0] }
+          },
           percentile_50: {
-            $arrayElemAt: [
-              '$durations',
-              { $floor: { $multiply: [0.5, { $size: '$durations' }] } }
-            ]
+            duration: { $arrayElemAt: ['$durations', '$index_50'] },
+            endpoint: { $arrayElemAt: ['$endpoints', '$index_50'] },
+            status: { $arrayElemAt: ['$statuses', '$index_50'] },
+            method: { $arrayElemAt: ['$methods', '$index_50'] }
           },
           percentile_90: {
-            $arrayElemAt: [
-              '$durations',
-              { $floor: { $multiply: [0.9, { $size: '$durations' }] } }
-            ]
+            duration: { $arrayElemAt: ['$durations', '$index_90'] },
+            endpoint: { $arrayElemAt: ['$endpoints', '$index_90'] },
+            status: { $arrayElemAt: ['$statuses', '$index_90'] },
+            method: { $arrayElemAt: ['$methods', '$index_90'] }
           },
           percentile_95: {
-            $arrayElemAt: [
-              '$durations',
-              { $floor: { $multiply: [0.95, { $size: '$durations' }] } }
-            ]
+            duration: { $arrayElemAt: ['$durations', '$index_95'] },
+            endpoint: { $arrayElemAt: ['$endpoints', '$index_95'] },
+            status: { $arrayElemAt: ['$statuses', '$index_95'] },
+            method: { $arrayElemAt: ['$methods', '$index_95'] }
           },
           percentile_99: {
-            $arrayElemAt: [
-              '$durations',
-              { $floor: { $multiply: [0.99, { $size: '$durations' }] } }
-            ]
+            duration: { $arrayElemAt: ['$durations', '$index_99'] },
+            endpoint: { $arrayElemAt: ['$endpoints', '$index_99'] },
+            status: { $arrayElemAt: ['$statuses', '$index_99'] },
+            method: { $arrayElemAt: ['$methods', '$index_99'] }
           },
           percentile_999: {
-            $arrayElemAt: [
-              '$durations',
-              { $floor: { $multiply: [0.999, { $size: '$durations' }] } }
-            ]
+            duration: { $arrayElemAt: ['$durations', '$index_999'] },
+            endpoint: { $arrayElemAt: ['$endpoints', '$index_999'] },
+            status: { $arrayElemAt: ['$statuses', '$index_999'] },
+            method: { $arrayElemAt: ['$methods', '$index_999'] }
           },
           percentile_9999: {
-            $arrayElemAt: [
-              '$durations',
-              { $floor: { $multiply: [0.9999, { $size: '$durations' }] } }
-            ]
+            duration: { $arrayElemAt: ['$durations', '$index_9999'] },
+            endpoint: { $arrayElemAt: ['$endpoints', '$index_9999'] },
+            status: { $arrayElemAt: ['$statuses', '$index_9999'] },
+            method: { $arrayElemAt: ['$methods', '$index_9999'] }
           },
-          slowest: { $arrayElemAt: ['$durations', -1] }
+          slowest: {
+            duration: { $arrayElemAt: ['$durations', -1] },
+            endpoint: { $arrayElemAt: ['$endpoints', -1] },
+            status: { $arrayElemAt: ['$statuses', -1] },
+            method: { $arrayElemAt: ['$methods', -1] }
+          }
         }
       }
     ];
@@ -398,14 +428,14 @@ const invoked = async () => {
     }>(requestLogPipeline);
 
     const percentileCursor = requestLogDb.aggregate<{
-      fastest: number;
-      percentile_50: number;
-      percentile_90: number;
-      percentile_95: number;
-      percentile_99: number;
-      percentile_999: number;
-      percentile_9999: number;
-      slowest: number;
+      fastest: Percentile;
+      percentile_50: Percentile;
+      percentile_90: Percentile;
+      percentile_95: Percentile;
+      percentile_99: Percentile;
+      percentile_999: Percentile;
+      percentile_9999: Percentile;
+      slowest: Percentile;
     }>(requestPercentilePipeline);
 
     const limitedLogCursor = limitedLogDb.aggregate<{
@@ -451,7 +481,7 @@ const invoked = async () => {
     debug('compiling output');
     debug(`requestLogStats.length=${requestLogStats.length}`);
     debug(`limitedLogStats.length=${limitedLogStats.length}`);
-    debug(`requestPercentiles=${requestPercentiles}`);
+    debug('requestPercentiles=%O', requestPercentiles);
 
     outputStrings.push(`\n::REQUEST LOG::${requestLogStats.length ? '\n' : ''}`);
 
@@ -532,7 +562,9 @@ const invoked = async () => {
               if (endpoint.startsWith('404:')) {
                 _404Array.push(str);
               } else {
-                outputStrings.push(endpoint === '<unknown>' ? chalk.gray(str) : str);
+                outputStrings.push(
+                  endpoint === '<data missing>' ? chalk.gray(str) : str
+                );
               }
             });
 
@@ -556,43 +588,43 @@ const invoked = async () => {
         '  :PERCENTILES:',
         `   fastest: ${
           requestPercentiles?.fastest !== undefined
-            ? `${requestPercentiles.fastest}ms`
-            : '<unknown>'
+            ? percentileToString(requestPercentiles.fastest)
+            : '<data missing>'
         }`,
         `     50%<=: ${
           requestPercentiles?.percentile_50 !== undefined
-            ? `${requestPercentiles.percentile_50}ms`
-            : '<unknown>'
+            ? percentileToString(requestPercentiles.percentile_50)
+            : '<data missing>'
         }`,
         `     90%<=: ${
           requestPercentiles?.percentile_90 !== undefined
-            ? `${requestPercentiles.percentile_90}ms`
-            : '<unknown>'
+            ? percentileToString(requestPercentiles.percentile_90)
+            : '<data missing>'
         }`,
         `     95%<=: ${
           requestPercentiles?.percentile_95 !== undefined
-            ? `${requestPercentiles.percentile_95}ms`
-            : '<unknown>'
+            ? percentileToString(requestPercentiles.percentile_95)
+            : '<data missing>'
         }`,
         `     99%<=: ${
           requestPercentiles?.percentile_99 !== undefined
-            ? `${requestPercentiles.percentile_99}ms`
-            : '<unknown>'
+            ? percentileToString(requestPercentiles.percentile_99)
+            : '<data missing>'
         }`,
         `   99.9%<=: ${
           requestPercentiles?.percentile_999 !== undefined
-            ? `${requestPercentiles.percentile_999}ms`
-            : '<unknown>'
+            ? percentileToString(requestPercentiles.percentile_999)
+            : '<data missing>'
         }`,
         `  99.99%<=: ${
           requestPercentiles?.percentile_9999 !== undefined
-            ? `${requestPercentiles.percentile_9999}ms`
-            : '<unknown>'
+            ? percentileToString(requestPercentiles.percentile_9999)
+            : '<data missing>'
         }`,
         `   slowest: ${
           requestPercentiles?.slowest !== undefined
-            ? `${requestPercentiles.slowest}ms`
-            : '<unknown>'
+            ? percentileToString(requestPercentiles.slowest)
+            : '<data missing>'
         }`
       );
     }
@@ -643,3 +675,14 @@ export default invoked().catch((error: Error) => {
   log.error(error.message);
   process.exit(2);
 });
+
+type Percentile = {
+  duration: number;
+  endpoint: number;
+  status: number;
+  method: number;
+};
+
+function percentileToString(percentile: Percentile): string {
+  return `${percentile.duration}ms\t${percentile.method}\t${percentile.status}\t${percentile.endpoint}`;
+}

@@ -61,7 +61,7 @@
     "@types/debug": "^4.1.8",
     "@types/folder-hash": "^4.0.2",
     "@types/node": "^20.4.2",
-    "@types/react": "^18.2.15",
+    "@types/react": "^18.2.16",
     "@types/request-ip": "^0.0.38",
     "@xunnamius/babel-preset-next-babel": "^1.0.1",
     "@xunnamius/next-types": "^1.0.9",

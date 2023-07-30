@@ -74,7 +74,9 @@ const rules = {
   // ? Handled by integration tests
   'unicorn/prefer-module': 'off',
   // ? I am of the opinion that there is a difference between something being
-  // ? defined as nothing and something being undefined
+  // ? defined as nothing and something being undefined, such as in JSON.
+  // ? Usually, though, I try to avoid null, but I'd rather do that on a case by
+  // ? case basis.
   'unicorn/no-null': 'off',
   // ? Ensure files have the correct case... except for a few
   'unicorn/filename-case': [
@@ -140,7 +142,9 @@ const rules = {
   // ? This is not it, chief (Prettier prevails)
   'unicorn/number-literal-case': 'off',
   // ? I'll decide when I want switch cases for fallthrough or not, thanks
-  'unicorn/prefer-switch': 'off'
+  'unicorn/prefer-switch': 'off',
+  // ? Unicorn isn't smart enough to make this work in a way that's useful
+  'unicorn/import-style': 'off'
 };
 
 module.exports = {

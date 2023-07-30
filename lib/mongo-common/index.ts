@@ -44,7 +44,7 @@ export function getCommonSchemaConfig(additionalSchemaConfig?: DbSchema): DbSche
           },
           {
             name: 'request-log',
-            indices: [{ spec: 'header' }, { spec: 'ip' }]
+            indices: [{ spec: 'header' }, { spec: 'ip' }, { spec: 'durationMs' }]
           },
           {
             name: 'limited-log',

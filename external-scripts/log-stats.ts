@@ -407,8 +407,7 @@ const invoked = async () => {
       }
     ];
 
-    debug('request-log aggregation pipeline: %O', requestLogPipeline);
-    debug('limited-log aggregation pipeline: %O', limitedLogPipeline);
+    debug('running request-log aggregation pipeline: %O', requestLogPipeline);
 
     const byRequests = (a: { requests: number }, b: { requests: number }) =>
       b.requests - a.requests;
@@ -427,6 +426,11 @@ const invoked = async () => {
       latestAt: number;
     }>(requestLogPipeline);
 
+    debug(
+      'running request-log percentile aggregation pipeline: %O',
+      requestPercentilePipeline
+    );
+
     const percentileCursor = requestLogDb.aggregate<{
       fastest: Percentile;
       percentile_50: Percentile;
@@ -438,6 +442,8 @@ const invoked = async () => {
       slowest: Percentile;
     }>(requestPercentilePipeline);
 
+    debug('running limited-log aggregation pipeline: %O', limitedLogPipeline);
+
     const limitedLogCursor = limitedLogDb.aggregate<{
       owner?: string;
       token?: string;
@@ -446,11 +452,15 @@ const invoked = async () => {
       until: number;
     }>(limitedLogPipeline);
 
+    debug('converting cursors to arrays');
+
     const [requestLogStats, requestPercentiles, limitedLogStats] = await Promise.all([
       requestLogCursor.toArray(),
       percentileCursor.next(),
       limitedLogCursor.toArray()
     ]);
+
+    debug('closing cursors');
 
     await Promise.all([
       requestLogCursor.close(),

@@ -60,7 +60,7 @@
     "@types/cors": "^2.8.13",
     "@types/debug": "^4.1.8",
     "@types/folder-hash": "^4.0.2",
-    "@types/node": "^20.5.0",
+    "@types/node": "^20.5.4",
     "@types/react": "^18.2.20",
     "@types/request-ip": "^0.0.38",
     "@xunnamius/babel-preset-next-babel": "^1.0.1",

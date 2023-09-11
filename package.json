@@ -139,7 +139,7 @@
     "html-entities": "^2.4.0",
     "http-terminator": "^3.2.0",
     "husky": "^8.0.3",
-    "inquirer": "^8.2.5",
+    "inquirer": "^9.2.11",
     "jest": "^29.6.2",
     "jest-circus": "^29.6.2",
     "jest-environment-jsdom": "^29.6.2",
